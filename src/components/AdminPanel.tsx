@@ -49,8 +49,6 @@ interface ApiKeys {
   hasdataApiKey: string
   instagramApiKey: string
   linkedinApiKey: string
-  evolutionApiUrl: string
-  evolutionApiKey: string
 }
 
 interface ConnectionState {
@@ -82,17 +80,13 @@ export function AdminPanel() {
     openaiApiKey: '',
     hasdataApiKey: '',
     instagramApiKey: '',
-    linkedinApiKey: '',
-    evolutionApiUrl: '',
-    evolutionApiKey: ''
+    linkedinApiKey: ''
   })
   const [actualApiKeys, setActualApiKeys] = useState<ApiKeys>({
     openaiApiKey: '',
     hasdataApiKey: '',
     instagramApiKey: '',
-    linkedinApiKey: '',
-    evolutionApiUrl: '',
-    evolutionApiKey: ''
+    linkedinApiKey: ''
   })
   const [showKeys, setShowKeys] = useState(false)
   const [savingKeys, setSavingKeys] = useState(false)
@@ -188,9 +182,7 @@ export function AdminPanel() {
           openaiApiKey: keysData.apiKeys.openaiApiKey || '',
           hasdataApiKey: keysData.apiKeys.hasdataApiKey || '',
           instagramApiKey: keysData.apiKeys.instagramApiKey || '',
-          linkedinApiKey: keysData.apiKeys.linkedinApiKey || '',
-          evolutionApiUrl: keysData.apiKeys.evolutionApiUrl || '',
-          evolutionApiKey: keysData.apiKeys.evolutionApiKey || ''
+          linkedinApiKey: keysData.apiKeys.linkedinApiKey || ''
         })
       }
 
@@ -223,25 +215,19 @@ export function AdminPanel() {
       const localHasData = localStorage.getItem('vai_hasdata_key') || ''
       const localInstagram = localStorage.getItem('vai_instagram_key') || ''
       const localLinkedin = localStorage.getItem('vai_linkedin_key') || ''
-      const localEvolutionUrl = localStorage.getItem('vai_evolution_url') || ''
-      const localEvolutionKey = localStorage.getItem('vai_evolution_key') || ''
       
       setActualApiKeys({
         openaiApiKey: localOpenAI,
         hasdataApiKey: localHasData,
         instagramApiKey: localInstagram,
-        linkedinApiKey: localLinkedin,
-        evolutionApiUrl: localEvolutionUrl,
-        evolutionApiKey: localEvolutionKey
+        linkedinApiKey: localLinkedin
       })
       
       setApiKeys({
         openaiApiKey: localOpenAI ? '***' + localOpenAI.slice(-4) : '',
         hasdataApiKey: localHasData ? '***' + localHasData.slice(-4) : '',
         instagramApiKey: localInstagram ? '***' + localInstagram.slice(-4) : '',
-        linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : '',
-        evolutionApiUrl: localEvolutionUrl ? '***' + localEvolutionUrl.slice(-4) : '',
-        evolutionApiKey: localEvolutionKey ? '***' + localEvolutionKey.slice(-4) : ''
+        linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : ''
       })
     } finally {
       setLoading(false)
@@ -291,21 +277,13 @@ export function AdminPanel() {
       if (keysToSave.linkedinApiKey) {
         localStorage.setItem('vai_linkedin_key', keysToSave.linkedinApiKey)
       }
-      if (keysToSave.evolutionApiUrl) {
-        localStorage.setItem('vai_evolution_url', keysToSave.evolutionApiUrl)
-      }
-      if (keysToSave.evolutionApiKey) {
-        localStorage.setItem('vai_evolution_key', keysToSave.evolutionApiKey)
-      }
       
       // Update display with masked keys
       setApiKeys({
         openaiApiKey: keysToSave.openaiApiKey ? '***' + keysToSave.openaiApiKey.slice(-4) : '',
         hasdataApiKey: keysToSave.hasdataApiKey ? '***' + keysToSave.hasdataApiKey.slice(-4) : '',
         instagramApiKey: keysToSave.instagramApiKey ? '***' + keysToSave.instagramApiKey.slice(-4) : '',
-        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : '',
-        evolutionApiUrl: keysToSave.evolutionApiUrl ? '***' + keysToSave.evolutionApiUrl.slice(-4) : '',
-        evolutionApiKey: keysToSave.evolutionApiKey ? '***' + keysToSave.evolutionApiKey.slice(-4) : ''
+        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : ''
       })
       
       setActualApiKeys(keysToSave)
@@ -328,21 +306,13 @@ export function AdminPanel() {
       if (keysToSave.linkedinApiKey) {
         localStorage.setItem('vai_linkedin_key', keysToSave.linkedinApiKey)
       }
-      if (keysToSave.evolutionApiUrl) {
-        localStorage.setItem('vai_evolution_url', keysToSave.evolutionApiUrl)
-      }
-      if (keysToSave.evolutionApiKey) {
-        localStorage.setItem('vai_evolution_key', keysToSave.evolutionApiKey)
-      }
       
       // Update display with masked keys
       setApiKeys({
         openaiApiKey: keysToSave.openaiApiKey ? '***' + keysToSave.openaiApiKey.slice(-4) : '',
         hasdataApiKey: keysToSave.hasdataApiKey ? '***' + keysToSave.hasdataApiKey.slice(-4) : '',
         instagramApiKey: keysToSave.instagramApiKey ? '***' + keysToSave.instagramApiKey.slice(-4) : '',
-        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : '',
-        evolutionApiUrl: keysToSave.evolutionApiUrl ? '***' + keysToSave.evolutionApiUrl.slice(-4) : '',
-        evolutionApiKey: keysToSave.evolutionApiKey ? '***' + keysToSave.evolutionApiKey.slice(-4) : ''
+        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : ''
       })
       
       setActualApiKeys(keysToSave)
@@ -385,28 +355,22 @@ export function AdminPanel() {
     const localHasData = localStorage.getItem('vai_hasdata_key') || ''
     const localInstagram = localStorage.getItem('vai_instagram_key') || ''
     const localLinkedin = localStorage.getItem('vai_linkedin_key') || ''
-    const localEvolutionUrl = localStorage.getItem('vai_evolution_url') || ''
-    const localEvolutionKey = localStorage.getItem('vai_evolution_key') || ''
     
     setActualApiKeys({
       openaiApiKey: localOpenAI,
       hasdataApiKey: localHasData,
       instagramApiKey: localInstagram,
-      linkedinApiKey: localLinkedin,
-      evolutionApiUrl: localEvolutionUrl,
-      evolutionApiKey: localEvolutionKey
+      linkedinApiKey: localLinkedin
     })
     
     setApiKeys({
       openaiApiKey: localOpenAI ? '***' + localOpenAI.slice(-4) : '',
       hasdataApiKey: localHasData ? '***' + localHasData.slice(-4) : '',
       instagramApiKey: localInstagram ? '***' + localInstagram.slice(-4) : '',
-      linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : '',
-      evolutionApiUrl: localEvolutionUrl ? '***' + localEvolutionUrl.slice(-4) : '',
-      evolutionApiKey: localEvolutionKey ? '***' + localEvolutionKey.slice(-4) : ''
+      linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : ''
     })
     
-    if (localOpenAI || localHasData || localInstagram || localLinkedin || localEvolutionUrl || localEvolutionKey) {
+    if (localOpenAI || localHasData || localInstagram || localLinkedin) {
       console.log('📦 Chaves carregadas do localStorage')
     }
   }
@@ -630,28 +594,6 @@ export function AdminPanel() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="evolution-url" className="text-sm">URL da API Evolution</Label>
-              <Input
-                id="evolution-url"
-                type="text"
-                placeholder="https://sua-evolution-api.com"
-                value={actualApiKeys.evolutionApiUrl}
-                onChange={(e) => setActualApiKeys(prev => ({ ...prev, evolutionApiUrl: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="evolution-key" className="text-sm">Chave da API Evolution</Label>
-              <Input
-                id="evolution-key"
-                type={showKeys ? "text" : "password"}
-                placeholder="ev_..."
-                value={actualApiKeys.evolutionApiKey}
-                onChange={(e) => setActualApiKeys(prev => ({ ...prev, evolutionApiKey: e.target.value }))}
-              />
-            </div>
-
             <Button 
               onClick={saveApiKeys} 
               disabled={savingKeys}
@@ -708,12 +650,6 @@ export function AdminPanel() {
               )}
               {actualApiKeys.linkedinApiKey && (
                 <p className="text-green-600">✅ LinkedIn configurada</p>
-              )}
-              {actualApiKeys.evolutionApiUrl && (
-                <p className="text-green-600">✅ URL Evolution configurada</p>
-              )}
-              {actualApiKeys.evolutionApiKey && (
-                <p className="text-green-600">✅ Chave Evolution configurada</p>
               )}
             </div>
           </CardContent>
