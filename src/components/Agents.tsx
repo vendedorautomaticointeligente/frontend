@@ -116,6 +116,7 @@ export function Agents() {
 
   const [formData, setFormData] = useState<AgentFormData>(emptyFormData)
   const [expandedSections, setExpandedSections] = useState({
+    nome_agente: true,
     quem_atende: true,
     sobre_empresa: false,
     sobre_produto: false,
@@ -394,7 +395,7 @@ export function Agents() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl mb-1 sm:mb-2">Agentes de Abordagem</h1>
+            <h1 className="text-2xl sm:text-3xl mb-1 sm:mb-2">Agentes PNH (Pessoas Não Humanas)</h1>
             <p className="text-sm sm:text-base text-muted-foreground">
               Configure agentes de IA personalizados para seus atendimentos
             </p>
@@ -413,7 +414,7 @@ export function Agents() {
 
         {/* New Agent Form */}
         {creatingNewAgent && (
-          <Card className="border-2 border-primary/20 bg-primary/5">
+          <Card className="border border-slate-200 bg-slate-100/50">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -436,8 +437,35 @@ export function Agents() {
             </CardHeader>
             <CardContent className="space-y-6">
 
+              {/* 0. NOME DO AGENTE */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('nome_agente')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">0. NOME DO AGENTE</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.nome_agente ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.nome_agente && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="nome_agente_pnh">Identificador do Agente PNH *</Label>
+                      <Input
+                        id="nome_agente_pnh"
+                        placeholder="Ex: Agente de Vendas 1, Bot de Suporte Premium, IA Consultora VIP"
+                        value={formData.agente_nome}
+                        onChange={(e) => handleFormChange('agente_nome', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* 1. QUEM ATENDE */}
-              <div className="border rounded-lg">
+              <div className="border border-slate-300 rounded-lg">
                 <button
                   onClick={() => toggleSection('quem_atende')}
                   className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
@@ -456,6 +484,7 @@ export function Agents() {
                         placeholder="Ex: Murilo, Ricardo, Ana do Suporte"
                         value={formData.agente_nome}
                         onChange={(e) => handleFormChange('agente_nome', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -466,6 +495,7 @@ export function Agents() {
                         placeholder="Ex: Suporte, Consultor, Vendas, Atendimento Comercial"
                         value={formData.agente_funcao}
                         onChange={(e) => handleFormChange('agente_funcao', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -476,6 +506,7 @@ export function Agents() {
                         placeholder="Ex: Bem direto e claro, Amigável e simples, Profissional e consultivo"
                         value={formData.agente_jeito_falar}
                         onChange={(e) => handleFormChange('agente_jeito_falar', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -487,6 +518,7 @@ export function Agents() {
                         value={formData.agente_nao_fazer}
                         onChange={(e) => handleFormChange('agente_nao_fazer', e.target.value)}
                         rows={3}
+                        className="border border-slate-300"
                       />
                     </div>
                   </div>
@@ -494,7 +526,7 @@ export function Agents() {
               </div>
 
               {/* 2. SOBRE A EMPRESA */}
-              <div className="border rounded-lg">
+              <div className="border border-slate-300 rounded-lg">
                 <button
                   onClick={() => toggleSection('sobre_empresa')}
                   className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
@@ -513,6 +545,7 @@ export function Agents() {
                         placeholder="Ex: VAI - Vendedor Automático Inteligente"
                         value={formData.empresa_nome}
                         onChange={(e) => handleFormChange('empresa_nome', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -523,6 +556,7 @@ export function Agents() {
                         placeholder="Ex: Automação comercial, Contabilidade para e-commerce, Marketing digital"
                         value={formData.empresa_o_que_faz}
                         onChange={(e) => handleFormChange('empresa_o_que_faz', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -534,6 +568,7 @@ export function Agents() {
                         value={formData.empresa_diferenciais}
                         onChange={(e) => handleFormChange('empresa_diferenciais', e.target.value)}
                         rows={2}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -545,6 +580,7 @@ export function Agents() {
                         value={formData.empresa_nao_faz}
                         onChange={(e) => handleFormChange('empresa_nao_faz', e.target.value)}
                         rows={2}
+                        className="border border-slate-300"
                       />
                     </div>
                   </div>
@@ -552,7 +588,7 @@ export function Agents() {
               </div>
 
               {/* 3. SOBRE O PRODUTO/SERVIÇO */}
-              <div className="border rounded-lg">
+              <div className="border border-slate-300 rounded-lg">
                 <button
                   onClick={() => toggleSection('sobre_produto')}
                   className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
@@ -571,6 +607,7 @@ export function Agents() {
                         placeholder="Ex: Sistema de automação comercial, Plataforma de artigos automáticos"
                         value={formData.produto_o_que_e}
                         onChange={(e) => handleFormChange('produto_o_que_e', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -582,6 +619,7 @@ export function Agents() {
                         value={formData.produto_funcionalidades}
                         onChange={(e) => handleFormChange('produto_funcionalidades', e.target.value)}
                         rows={4}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -593,6 +631,7 @@ export function Agents() {
                         value={formData.produto_beneficios}
                         onChange={(e) => handleFormChange('produto_beneficios', e.target.value)}
                         rows={3}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -603,6 +642,7 @@ export function Agents() {
                         placeholder="Ex: E-commerces, Mercados, Profissionais autônomos"
                         value={formData.produto_publico}
                         onChange={(e) => handleFormChange('produto_publico', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
                   </div>
@@ -610,7 +650,7 @@ export function Agents() {
               </div>
 
               {/* 4. PLANOS E PREÇOS */}
-              <div className="border rounded-lg">
+              <div className="border border-slate-300 rounded-lg">
                 <button
                   onClick={() => toggleSection('planos_precos')}
                   className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
@@ -662,6 +702,7 @@ export function Agents() {
                                   placeholder="Ex: Básico"
                                   value={plan.name}
                                   onChange={(e) => handlePlanChange(index, 'name', e.target.value)}
+                                  className="border border-slate-300"
                                 />
                               </div>
                               <div className="space-y-1">
@@ -671,6 +712,7 @@ export function Agents() {
                                   placeholder="Ex: R$ 99/mês"
                                   value={plan.price}
                                   onChange={(e) => handlePlanChange(index, 'price', e.target.value)}
+                                  className="border border-slate-300"
                                 />
                               </div>
                             </div>
@@ -683,6 +725,7 @@ export function Agents() {
                                 value={plan.includes}
                                 onChange={(e) => handlePlanChange(index, 'includes', e.target.value)}
                                 rows={2}
+                                className="border border-slate-300"
                               />
                             </div>
 
@@ -693,6 +736,7 @@ export function Agents() {
                                 placeholder="Ex: 1000 msgs/mês"
                                 value={plan.limits}
                                 onChange={(e) => handlePlanChange(index, 'limits', e.target.value)}
+                                className="border border-slate-300"
                               />
                             </div>
                           </div>
@@ -709,6 +753,7 @@ export function Agents() {
                         placeholder="Ex: 7 dias, 5 usos, Sem teste"
                         value={formData.planos_teste_gratis}
                         onChange={(e) => handleFormChange('planos_teste_gratis', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -719,6 +764,7 @@ export function Agents() {
                         placeholder="Ex: Pix, Cartão, Assinatura mensal"
                         value={formData.planos_pagamento}
                         onChange={(e) => handleFormChange('planos_pagamento', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -729,6 +775,7 @@ export function Agents() {
                         placeholder="Ex: Não há reembolso por ser SaaS pré-pago"
                         value={formData.planos_reembolso}
                         onChange={(e) => handleFormChange('planos_reembolso', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -740,6 +787,7 @@ export function Agents() {
                         value={formData.planos_links}
                         onChange={(e) => handleFormChange('planos_links', e.target.value)}
                         rows={2}
+                        className="border border-slate-300"
                       />
                     </div>
                   </div>
@@ -747,7 +795,7 @@ export function Agents() {
               </div>
 
               {/* 5. COMO O ATENDIMENTO DEVE FUNCIONAR */}
-              <div className="border rounded-lg">
+              <div className="border border-slate-300 rounded-lg">
                 <button
                   onClick={() => toggleSection('como_funciona')}
                   className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
@@ -766,6 +814,7 @@ export function Agents() {
                         placeholder="Ex: Fechar vendas, Gerar reuniões, Qualificar leads, Suporte + venda leve"
                         value={formData.atendimento_objetivo}
                         onChange={(e) => handleFormChange('atendimento_objetivo', e.target.value)}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -777,6 +826,7 @@ export function Agents() {
                         value={formData.atendimento_conducao}
                         onChange={(e) => handleFormChange('atendimento_conducao', e.target.value)}
                         rows={3}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -788,6 +838,7 @@ export function Agents() {
                         value={formData.atendimento_frases_sugeridas}
                         onChange={(e) => handleFormChange('atendimento_frases_sugeridas', e.target.value)}
                         rows={3}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -799,6 +850,7 @@ export function Agents() {
                         value={formData.atendimento_evitar}
                         onChange={(e) => handleFormChange('atendimento_evitar', e.target.value)}
                         rows={2}
+                        className="border border-slate-300"
                       />
                     </div>
 
@@ -810,6 +862,7 @@ export function Agents() {
                         value={formData.atendimento_resposta_padrao_fora_escopo}
                         onChange={(e) => handleFormChange('atendimento_resposta_padrao_fora_escopo', e.target.value)}
                         rows={2}
+                        className="border border-slate-300"
                       />
                     </div>
                   </div>
