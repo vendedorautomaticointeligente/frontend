@@ -987,23 +987,6 @@ export function Agents() {
                 <CardContent className="space-y-3">
                   <Separator />
 
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Função:</span>
-                      <span className="font-medium capitalize">{agent.data.agente_funcao || 'Não definida'}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Objetivo:</span>
-                      <span className="font-medium text-xs">{agent.data.atendimento_objetivo.substring(0, 20)}...</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Usos:</span>
-                      <Badge variant="secondary">{agent.usageCount}</Badge>
-                    </div>
-                  </div>
-
-                  <Separator />
-
                   <div className="flex flex-wrap gap-2">
                     <Button
                       variant="outline"
