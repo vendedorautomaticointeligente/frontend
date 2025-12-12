@@ -21,7 +21,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
 // Salvar token no localStorage
 const saveToken = (token: string) => {
