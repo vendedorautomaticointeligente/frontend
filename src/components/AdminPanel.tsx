@@ -44,13 +44,6 @@ interface User {
   role: string
 }
 
-interface ApiKeys {
-  openaiApiKey: string
-  hasdataApiKey: string
-  instagramApiKey: string
-  linkedinApiKey: string
-}
-
 interface ConnectionState {
   isOnline: boolean
   lastError: string | null
@@ -76,21 +69,6 @@ export function AdminPanel() {
     systemStatus: 'operational'
   })
   const [users, setUsers] = useState<User[]>([])
-  const [apiKeys, setApiKeys] = useState<ApiKeys>({
-    openaiApiKey: '',
-    hasdataApiKey: '',
-    instagramApiKey: '',
-    linkedinApiKey: ''
-  })
-  const [actualApiKeys, setActualApiKeys] = useState<ApiKeys>({
-    openaiApiKey: '',
-    hasdataApiKey: '',
-    instagramApiKey: '',
-    linkedinApiKey: ''
-  })
-  const [showKeys, setShowKeys] = useState(false)
-  const [savingKeys, setSavingKeys] = useState(false)
-  const [testingApi, setTestingApi] = useState(false)
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
 
@@ -172,20 +150,6 @@ export function AdminPanel() {
       setStats(dashboardData.stats || stats)
       setUsers(dashboardData.users || [])
 
-      // Load API keys
-      const keysData = await apiCall('/admin/api-keys')
-      console.log("🔑 API Keys response:", keysData)
-      
-      // Store the masked versions for display
-      if (keysData.apiKeys) {
-        setApiKeys({
-          openaiApiKey: keysData.apiKeys.openaiApiKey || '',
-          hasdataApiKey: keysData.apiKeys.hasdataApiKey || '',
-          instagramApiKey: keysData.apiKeys.instagramApiKey || '',
-          linkedinApiKey: keysData.apiKeys.linkedinApiKey || ''
-        })
-      }
-
       toast.success('Painel de administração carregado!')
 
     } catch (error) {
@@ -209,119 +173,11 @@ export function AdminPanel() {
           role: 'admin'
         }
       ])
-      
-      // Load local keys
-      const localOpenAI = localStorage.getItem('vai_openai_key') || ''
-      const localHasData = localStorage.getItem('vai_hasdata_key') || ''
-      const localInstagram = localStorage.getItem('vai_instagram_key') || ''
-      const localLinkedin = localStorage.getItem('vai_linkedin_key') || ''
-      
-      setActualApiKeys({
-        openaiApiKey: localOpenAI,
-        hasdataApiKey: localHasData,
-        instagramApiKey: localInstagram,
-        linkedinApiKey: localLinkedin
-      })
-      
-      setApiKeys({
-        openaiApiKey: localOpenAI ? '***' + localOpenAI.slice(-4) : '',
-        hasdataApiKey: localHasData ? '***' + localHasData.slice(-4) : '',
-        instagramApiKey: localInstagram ? '***' + localInstagram.slice(-4) : '',
-        linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : ''
-      })
     } finally {
       setLoading(false)
     }
   }
 
-  const saveApiKeys = async () => {
-    setSavingKeys(true)
-    setError('')
-    setSuccess('')
-
-    // Get the actual keys (either newly entered or existing)
-    const keysToSave = {
-      openaiApiKey: actualApiKeys.openaiApiKey.trim(),
-      hasdataApiKey: actualApiKeys.hasdataApiKey.trim(),
-      instagramApiKey: actualApiKeys.instagramApiKey.trim(),
-      linkedinApiKey: actualApiKeys.linkedinApiKey.trim(),
-      evolutionApiUrl: actualApiKeys.evolutionApiUrl.trim(),
-      evolutionApiKey: actualApiKeys.evolutionApiKey.trim()
-    }
-
-    // Local validation
-    if (!keysToSave.openaiApiKey && !keysToSave.hasdataApiKey && !keysToSave.instagramApiKey && !keysToSave.linkedinApiKey && !keysToSave.evolutionApiUrl && !keysToSave.evolutionApiKey) {
-      toast.error('Por favor, preencha pelo menos uma chave de API')
-      setSavingKeys(false)
-      return
-    }
-
-    try {
-      const response = await apiCall('/admin/api-keys', {
-        method: 'POST',
-        body: JSON.stringify(keysToSave)
-      })
-      
-      console.log('✅ API keys saved:', response)
-      
-      // Also save to localStorage as backup
-      if (keysToSave.openaiApiKey) {
-        localStorage.setItem('vai_openai_key', keysToSave.openaiApiKey)
-      }
-      if (keysToSave.hasdataApiKey) {
-        localStorage.setItem('vai_hasdata_key', keysToSave.hasdataApiKey)
-      }
-      if (keysToSave.instagramApiKey) {
-        localStorage.setItem('vai_instagram_key', keysToSave.instagramApiKey)
-      }
-      if (keysToSave.linkedinApiKey) {
-        localStorage.setItem('vai_linkedin_key', keysToSave.linkedinApiKey)
-      }
-      
-      // Update display with masked keys
-      setApiKeys({
-        openaiApiKey: keysToSave.openaiApiKey ? '***' + keysToSave.openaiApiKey.slice(-4) : '',
-        hasdataApiKey: keysToSave.hasdataApiKey ? '***' + keysToSave.hasdataApiKey.slice(-4) : '',
-        instagramApiKey: keysToSave.instagramApiKey ? '***' + keysToSave.instagramApiKey.slice(-4) : '',
-        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : ''
-      })
-      
-      setActualApiKeys(keysToSave)
-      toast.success('✅ Chaves de API salvas com sucesso!')
-      setSuccess('Chaves de API atualizadas com sucesso!')
-      
-    } catch (error) {
-      console.error('Error saving API keys:', error)
-      
-      // Fallback to localStorage
-      if (keysToSave.openaiApiKey) {
-        localStorage.setItem('vai_openai_key', keysToSave.openaiApiKey)
-      }
-      if (keysToSave.hasdataApiKey) {
-        localStorage.setItem('vai_hasdata_key', keysToSave.hasdataApiKey)
-      }
-      if (keysToSave.instagramApiKey) {
-        localStorage.setItem('vai_instagram_key', keysToSave.instagramApiKey)
-      }
-      if (keysToSave.linkedinApiKey) {
-        localStorage.setItem('vai_linkedin_key', keysToSave.linkedinApiKey)
-      }
-      
-      // Update display with masked keys
-      setApiKeys({
-        openaiApiKey: keysToSave.openaiApiKey ? '***' + keysToSave.openaiApiKey.slice(-4) : '',
-        hasdataApiKey: keysToSave.hasdataApiKey ? '***' + keysToSave.hasdataApiKey.slice(-4) : '',
-        instagramApiKey: keysToSave.instagramApiKey ? '***' + keysToSave.instagramApiKey.slice(-4) : '',
-        linkedinApiKey: keysToSave.linkedinApiKey ? '***' + keysToSave.linkedinApiKey.slice(-4) : ''
-      })
-      
-      setActualApiKeys(keysToSave)
-      toast.warning('⚠️ Chaves salvas localmente (modo fallback)')
-      setSuccess('Chaves salvas localmente com sucesso!')
-    } finally {
-      setSavingKeys(false)
-    }
-  }
 
   const testHasDataApi = async () => {
     setTestingApi(true)
@@ -350,36 +206,7 @@ export function AdminPanel() {
     }
   }
 
-  const loadLocalApiKeys = () => {
-    const localOpenAI = localStorage.getItem('vai_openai_key') || ''
-    const localHasData = localStorage.getItem('vai_hasdata_key') || ''
-    const localInstagram = localStorage.getItem('vai_instagram_key') || ''
-    const localLinkedin = localStorage.getItem('vai_linkedin_key') || ''
-    
-    setActualApiKeys({
-      openaiApiKey: localOpenAI,
-      hasdataApiKey: localHasData,
-      instagramApiKey: localInstagram,
-      linkedinApiKey: localLinkedin
-    })
-    
-    setApiKeys({
-      openaiApiKey: localOpenAI ? '***' + localOpenAI.slice(-4) : '',
-      hasdataApiKey: localHasData ? '***' + localHasData.slice(-4) : '',
-      instagramApiKey: localInstagram ? '***' + localInstagram.slice(-4) : '',
-      linkedinApiKey: localLinkedin ? '***' + localLinkedin.slice(-4) : ''
-    })
-    
-    if (localOpenAI || localHasData || localInstagram || localLinkedin) {
-      console.log('📦 Chaves carregadas do localStorage')
-    }
-  }
-
   useEffect(() => {
-    // Load local keys first
-    loadLocalApiKeys()
-    
-    // Then try to load from server if we have access token
     if (accessToken) {
       loadDashboardData()
     }
@@ -526,135 +353,6 @@ export function AdminPanel() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* API Keys Configuration */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
-              <Key className="w-4 h-4 sm:w-5 sm:h-5" />
-              Configuração de APIs
-            </CardTitle>
-            <CardDescription className="text-xs sm:text-sm">
-              Configure as chaves de API para integrações externas
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="openai-key" className="text-sm">Chave da API OpenAI</Label>
-              <div className="relative">
-                <Input
-                  id="openai-key"
-                  type={showKeys ? "text" : "password"}
-                  placeholder="sk-proj-..."
-                  value={actualApiKeys.openaiApiKey}
-                  onChange={(e) => setActualApiKeys(prev => ({ ...prev, openaiApiKey: e.target.value }))}
-                  className="pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-0 top-0 h-full px-3"
-                  onClick={() => setShowKeys(!showKeys)}
-                >
-                  {showKeys ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </Button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="hasdata-key" className="text-sm">Chave da API HasData</Label>
-              <Input
-                id="hasdata-key"
-                type={showKeys ? "text" : "password"}
-                placeholder="Sua chave HasData"
-                value={actualApiKeys.hasdataApiKey}
-                onChange={(e) => setActualApiKeys(prev => ({ ...prev, hasdataApiKey: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="instagram-key" className="text-sm">Chave da API Instagram</Label>
-              <Input
-                id="instagram-key"
-                type={showKeys ? "text" : "password"}
-                placeholder="ig_..."
-                value={actualApiKeys.instagramApiKey}
-                onChange={(e) => setActualApiKeys(prev => ({ ...prev, instagramApiKey: e.target.value }))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="linkedin-key" className="text-sm">Chave da API LinkedIn</Label>
-              <Input
-                id="linkedin-key"
-                type={showKeys ? "text" : "password"}
-                placeholder="li_..."
-                value={actualApiKeys.linkedinApiKey}
-                onChange={(e) => setActualApiKeys(prev => ({ ...prev, linkedinApiKey: e.target.value }))}
-              />
-            </div>
-
-            <Button 
-              onClick={saveApiKeys} 
-              disabled={savingKeys}
-              className="w-full"
-            >
-              {savingKeys ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                <>
-                  <Save className="w-4 h-4 mr-2" />
-                  Salvar Chaves
-                </>
-              )}
-            </Button>
-
-            <Button 
-              onClick={testHasDataApi} 
-              disabled={testingApi}
-              variant="outline"
-              className="w-full"
-            >
-              {testingApi ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Testando API...
-                </>
-              ) : (
-                <>
-                  <Activity className="w-4 h-4 mr-2" />
-                  Testar Conexão HasData
-                </>
-              )}
-            </Button>
-
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p>• OpenAI: Para geração de listas inteligentes</p>
-              <p>• HasData: Para busca de empresas no Google Maps</p>
-              <p>• Instagram: (Opcional) Funcionalidades adicionais</p>
-              <p>• LinkedIn: (Opcional) Funcionalidades adicionais</p>
-              {!connection.isOnline && (
-                <p className="text-yellow-600">⚠️ Modo offline - Chaves salvas localmente</p>
-              )}
-              {actualApiKeys.openaiApiKey && (
-                <p className="text-green-600">✅ OpenAI configurada</p>
-              )}
-              {actualApiKeys.hasdataApiKey && (
-                <p className="text-green-600">✅ HasData configurada</p>
-              )}
-              {actualApiKeys.instagramApiKey && (
-                <p className="text-green-600">✅ Instagram configurada</p>
-              )}
-              {actualApiKeys.linkedinApiKey && (
-                <p className="text-green-600">✅ LinkedIn configurada</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* System Information */}
         <Card>
           <CardHeader>
