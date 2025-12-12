@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Textarea } from './ui/textarea'
 import { MessageSquare, Phone, Instagram, Facebook, QrCode, Check, X, Loader2, AlertCircle, Zap, Plug, RefreshCw, Settings, Smartphone } from 'lucide-react'
-import { toast } from 'sonner@2.0.3'
+import { toast } from 'sonner'
 import { QRCodeCanvas } from './ui/qrcode'
 
 interface Integration {

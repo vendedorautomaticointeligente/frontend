@@ -154,6 +154,9 @@ export function ListGeneratorB2B() {
   const [editListDescription, setEditListDescription] = useState("")
   const [isUpdatingList, setIsUpdatingList] = useState(false)
 
+  // Load previous search info state
+  const [isLoadingPreviousInfo, setIsLoadingPreviousInfo] = useState(false)
+
   // Save contacts state - REMOVED: contacts now auto-saved by backend on generation
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
@@ -726,6 +729,60 @@ export function ListGeneratorB2B() {
 
   const refreshLists = () => {
     loadSavedLists()
+  }
+
+  const loadPreviousSearchInfo = async () => {
+    if (!selectedList) {
+      setError('Por favor, selecione uma lista primeiro')
+      return
+    }
+
+    setIsLoadingPreviousInfo(true)
+    setError(null)
+
+    try {
+      console.log("📋 Loading previous search info for list:", selectedList)
+      const data = await apiCall(`/lists/${selectedList}/previous-search`)
+      
+      if (data.success && data.searchInfo) {
+        const info = data.searchInfo
+        
+        // Load the previous search parameters
+        if (info.businessNiche) {
+          setBusinessNiche(info.businessNiche)
+          console.log("✅ Loaded business niche:", info.businessNiche)
+        }
+        
+        if (info.state) {
+          setSelectedState(info.state)
+          console.log("✅ Loaded state:", info.state)
+        }
+        
+        if (info.cities && Array.isArray(info.cities)) {
+          setSelectedCities(info.cities)
+          console.log("✅ Loaded cities:", info.cities)
+        }
+        
+        if (info.neighborhoods) {
+          setNeighborhoods(info.neighborhoods)
+          console.log("✅ Loaded neighborhoods:", info.neighborhoods)
+        }
+        
+        if (info.targetContactCount) {
+          setTargetContactCount(info.targetContactCount)
+          console.log("✅ Loaded target contact count:", info.targetContactCount)
+        }
+
+        setSuccess('✅ Informações anteriores carregadas com sucesso!')
+      } else {
+        setError('Nenhuma busca anterior encontrada para esta lista')
+      }
+    } catch (error) {
+      console.error('Error loading previous search info:', error)
+      setError(`Erro ao carregar informações anteriores: ${error.message}`)
+    } finally {
+      setIsLoadingPreviousInfo(false)
+    }
   }
 
   const loadListContacts = async (listId: string) => {
@@ -1613,6 +1670,27 @@ export function ListGeneratorB2B() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {selectedList && (
+                  <Button
+                    onClick={loadPreviousSearchInfo}
+                    disabled={isLoadingPreviousInfo}
+                    variant="outline"
+                    className="w-full gap-2 mb-2"
+                  >
+                    {isLoadingPreviousInfo ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Carregando...
+                      </>
+                    ) : (
+                      <>
+                        <FolderOpen className="w-4 h-4" />
+                        Carregar Informações Anteriores
+                      </>
+                    )}
+                  </Button>
+                )}
+
                 <div>
                   <Label htmlFor="niche">Nicho de Negócio*</Label>
                   <Input
