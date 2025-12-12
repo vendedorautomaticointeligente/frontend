@@ -338,6 +338,11 @@ export function Agents() {
   const updateAgent = async () => {
     if (!selectedAgent || !validateForm()) return
 
+    if (!accessToken) {
+      toast.error('Token não encontrado. Faça login novamente.')
+      return
+    }
+
     try {
       const response = await fetch(`${baseUrl}/agents/${selectedAgent.id}`, {
         method: 'PUT',
@@ -1046,32 +1051,412 @@ export function Agents() {
             </DialogHeader>
 
             <div className="space-y-6">
-              {/* Similar structure to creation form but in a dialog */}
-              <div className="space-y-2">
-                <Label htmlFor="edit-agente_nome">Nome do atendente *</Label>
-                <Input
-                  id="edit-agente_nome"
-                  value={formData.agente_nome}
-                  onChange={(e) => handleFormChange('agente_nome', e.target.value)}
-                />
+              {/* 0. NOME DO AGENTE */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('nome_agente')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">0. NOME DO AGENTE</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.nome_agente ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.nome_agente && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-nome_agente_pnh">Identificador do Agente PNH *</Label>
+                      <Input
+                        id="edit-nome_agente_pnh"
+                        placeholder="Ex: Agente de Vendas 1, Bot de Suporte Premium, IA Consultora VIP"
+                        value={formData.nome_agente_pnh}
+                        onChange={(e) => handleFormChange('nome_agente_pnh', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-empresa_nome">Nome da empresa *</Label>
-                <Input
-                  id="edit-empresa_nome"
-                  value={formData.empresa_nome}
-                  onChange={(e) => handleFormChange('empresa_nome', e.target.value)}
-                />
+              {/* 1. QUEM ATENDE */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('quem_atende')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">1. QUEM ATENDE</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.quem_atende ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.quem_atende && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-agente_nome">1.1 Nome do atendente *</Label>
+                      <Input
+                        id="edit-agente_nome"
+                        placeholder="Ex: Murilo, Ricardo, Ana do Suporte"
+                        value={formData.agente_nome}
+                        onChange={(e) => handleFormChange('agente_nome', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-agente_funcao">1.2 Função do atendente</Label>
+                      <Input
+                        id="edit-agente_funcao"
+                        placeholder="Ex: Suporte, Consultor, Vendas, Atendimento Comercial"
+                        value={formData.agente_funcao}
+                        onChange={(e) => handleFormChange('agente_funcao', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-agente_jeito_falar">1.3 Jeito de falar</Label>
+                      <Input
+                        id="edit-agente_jeito_falar"
+                        placeholder="Ex: Bem direto e claro, Amigável e simples, Profissional e consultivo"
+                        value={formData.agente_jeito_falar}
+                        onChange={(e) => handleFormChange('agente_jeito_falar', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-agente_nao_fazer">1.4 Coisas que não deve fazer</Label>
+                      <Textarea
+                        id="edit-agente_nao_fazer"
+                        placeholder="Ex: Não marcar reuniões, Não prometer nada fora dos planos, Não criar soluções personalizadas"
+                        value={formData.agente_nao_fazer}
+                        onChange={(e) => handleFormChange('agente_nao_fazer', e.target.value)}
+                        rows={3}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-atendimento_objetivo">Objetivo do atendimento *</Label>
-                <Input
-                  id="edit-atendimento_objetivo"
-                  value={formData.atendimento_objetivo}
-                  onChange={(e) => handleFormChange('atendimento_objetivo', e.target.value)}
-                />
+              {/* 2. SOBRE A EMPRESA */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('sobre_empresa')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">2. SOBRE A SUA EMPRESA</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.sobre_empresa ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.sobre_empresa && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-empresa_nome">2.1 Nome da empresa *</Label>
+                      <Input
+                        id="edit-empresa_nome"
+                        placeholder="Ex: VAI - Vendedor Automático Inteligente"
+                        value={formData.empresa_nome}
+                        onChange={(e) => handleFormChange('empresa_nome', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-empresa_o_que_faz">2.2 O que a empresa faz (em poucas palavras)</Label>
+                      <Input
+                        id="edit-empresa_o_que_faz"
+                        placeholder="Ex: Automação comercial, Contabilidade para e-commerce, Marketing digital"
+                        value={formData.empresa_o_que_faz}
+                        onChange={(e) => handleFormChange('empresa_o_que_faz', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-empresa_diferenciais">2.3 Diferenciais da empresa</Label>
+                      <Textarea
+                        id="edit-empresa_diferenciais"
+                        placeholder="Ex: 25 anos de mercado, Atendimento humanizado, Tecnologia própria"
+                        value={formData.empresa_diferenciais}
+                        onChange={(e) => handleFormChange('empresa_diferenciais', e.target.value)}
+                        rows={2}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-empresa_nao_faz">2.4 Coisas que a empresa não faz</Label>
+                      <Textarea
+                        id="edit-empresa_nao_faz"
+                        placeholder="Ex: Não desenvolve sistemas sob medida, Não oferece consultoria individual"
+                        value={formData.empresa_nao_faz}
+                        onChange={(e) => handleFormChange('empresa_nao_faz', e.target.value)}
+                        rows={2}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. SOBRE O PRODUTO/SERVIÇO */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('sobre_produto')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">3. SOBRE O SEU PRODUTO/SERVIÇO</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.sobre_produto ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.sobre_produto && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-produto_o_que_e">3.1 O que é o produto/serviço (descrição simples) *</Label>
+                      <Input
+                        id="edit-produto_o_que_e"
+                        placeholder="Ex: Sistema de automação comercial, Plataforma de artigos automáticos"
+                        value={formData.produto_o_que_e}
+                        onChange={(e) => handleFormChange('produto_o_que_e', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-produto_funcionalidades">3.2 Principais funcionalidades (1 por linha)</Label>
+                      <Textarea
+                        id="edit-produto_funcionalidades"
+                        placeholder="Ex: Emissão fiscal&#10;Controle de estoque&#10;Integração com WhatsApp"
+                        value={formData.produto_funcionalidades}
+                        onChange={(e) => handleFormChange('produto_funcionalidades', e.target.value)}
+                        rows={4}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-produto_beneficios">3.3 Principais benefícios para o cliente</Label>
+                      <Textarea
+                        id="edit-produto_beneficios"
+                        placeholder="Ex: Reduz tempo de operação&#10;Melhora vendas&#10;Simplifica processos"
+                        value={formData.produto_beneficios}
+                        onChange={(e) => handleFormChange('produto_beneficios', e.target.value)}
+                        rows={3}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-produto_publico">3.4 Para quem é indicado</Label>
+                      <Input
+                        id="edit-produto_publico"
+                        placeholder="Ex: E-commerces, Mercados, Profissionais autônomos"
+                        value={formData.produto_publico}
+                        onChange={(e) => handleFormChange('produto_publico', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 4. PLANOS E PREÇOS */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('planos_precos')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">4. PLANOS E PREÇOS</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.planos_precos ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.planos_precos && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-semibold">4.1 Seus planos</Label>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addPlan}
+                          className="gap-2"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Adicionar Plano
+                        </Button>
+                      </div>
+                      {formData.planos.map((plan, index) => (
+                        <Card key={index} className="p-4">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <Label className="font-semibold">Plano {index + 1}</Label>
+                              {formData.planos.length > 1 && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => removePlan(index)}
+                                >
+                                  <X className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label htmlFor={`edit-plan-name-${index}`} className="text-sm">Nome</Label>
+                                <Input
+                                  id={`edit-plan-name-${index}`}
+                                  placeholder="Ex: Básico"
+                                  value={plan.name}
+                                  onChange={(e) => handlePlanChange(index, 'name', e.target.value)}
+                                  className="border border-slate-300"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label htmlFor={`edit-plan-price-${index}`} className="text-sm">Preço</Label>
+                                <Input
+                                  id={`edit-plan-price-${index}`}
+                                  placeholder="Ex: R$ 99/mês"
+                                  value={plan.price}
+                                  onChange={(e) => handlePlanChange(index, 'price', e.target.value)}
+                                  className="border border-slate-300"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-plan-includes-${index}`} className="text-sm">O que inclui</Label>
+                              <Textarea
+                                id={`edit-plan-includes-${index}`}
+                                placeholder="Ex: Até 100 contatos, Suporte via email"
+                                value={plan.includes}
+                                onChange={(e) => handlePlanChange(index, 'includes', e.target.value)}
+                                rows={2}
+                                className="border border-slate-300"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label htmlFor={`edit-plan-limits-${index}`} className="text-sm">Limites</Label>
+                              <Input
+                                id={`edit-plan-limits-${index}`}
+                                placeholder="Ex: 1000 msgs/mês"
+                                value={plan.limits}
+                                onChange={(e) => handlePlanChange(index, 'limits', e.target.value)}
+                                className="border border-slate-300"
+                              />
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-planos_teste_gratis">4.2 Teste grátis (se houver)</Label>
+                      <Input
+                        id="edit-planos_teste_gratis"
+                        placeholder="Ex: 7 dias, 5 usos, Sem teste"
+                        value={formData.planos_teste_gratis}
+                        onChange={(e) => handleFormChange('planos_teste_gratis', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-planos_pagamento">4.3 Formas de pagamento</Label>
+                      <Input
+                        id="edit-planos_pagamento"
+                        placeholder="Ex: Pix, Cartão, Assinatura mensal"
+                        value={formData.planos_pagamento}
+                        onChange={(e) => handleFormChange('planos_pagamento', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-planos_reembolso">4.4 Política de reembolso</Label>
+                      <Input
+                        id="edit-planos_reembolso"
+                        placeholder="Ex: Não há reembolso por ser SaaS pré-pago"
+                        value={formData.planos_reembolso}
+                        onChange={(e) => handleFormChange('planos_reembolso', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-planos_links">4.5 Links oficiais</Label>
+                      <Textarea
+                        id="edit-planos_links"
+                        placeholder="Ex: site, checkout, manual, vídeo explicativo"
+                        value={formData.planos_links}
+                        onChange={(e) => handleFormChange('planos_links', e.target.value)}
+                        rows={2}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 5. COMO O ATENDIMENTO DEVE FUNCIONAR */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('como_funciona')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">5. COMO O ATENDIMENTO DEVE FUNCIONAR</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.como_funciona ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.como_funciona && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-atendimento_objetivo">5.1 Qual é o objetivo do atendimento *</Label>
+                      <Input
+                        id="edit-atendimento_objetivo"
+                        placeholder="Ex: Fechar vendas, Gerar reuniões, Qualificar leads, Suporte + venda leve"
+                        value={formData.atendimento_objetivo}
+                        onChange={(e) => handleFormChange('atendimento_objetivo', e.target.value)}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-atendimento_conducao">5.2 Como o atendente deve conduzir a conversa</Label>
+                      <Textarea
+                        id="edit-atendimento_conducao"
+                        placeholder="Ex: Ser claro e direto. Ajudar sem parecer vendedor demais. Indicar o plano ideal quando fizer sentido."
+                        value={formData.atendimento_conducao}
+                        onChange={(e) => handleFormChange('atendimento_conducao', e.target.value)}
+                        rows={3}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-atendimento_frases_sugeridas">5.3 Frases que gostaria que o atendente usasse (opcional)</Label>
+                      <Textarea
+                        id="edit-atendimento_frases_sugeridas"
+                        placeholder="Ex: 'Quer que eu te envie o link do plano ideal?'&#10;'Deixa eu ver qual opção fica melhor pra você.'"
+                        value={formData.atendimento_frases_sugeridas}
+                        onChange={(e) => handleFormChange('atendimento_frases_sugeridas', e.target.value)}
+                        rows={3}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-atendimento_evitar">5.4 Perguntas ou assuntos que o atendente deve evitar</Label>
+                      <Textarea
+                        id="edit-atendimento_evitar"
+                        placeholder="Ex: Temas sensíveis, política, saúde, finanças pessoais"
+                        value={formData.atendimento_evitar}
+                        onChange={(e) => handleFormChange('atendimento_evitar', e.target.value)}
+                        rows={2}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-atendimento_resposta_padrao_fora_escopo">5.5 Resposta padrão para pedidos fora do escopo</Label>
+                      <Textarea
+                        id="edit-atendimento_resposta_padrao_fora_escopo"
+                        placeholder="Ex: 'Entendi, mas hoje não fazemos esse tipo de serviço. Posso te ajudar a escolher o melhor plano?'"
+                        value={formData.atendimento_resposta_padrao_fora_escopo}
+                        onChange={(e) => handleFormChange('atendimento_resposta_padrao_fora_escopo', e.target.value)}
+                        rows={2}
+                        className="border border-slate-300"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
