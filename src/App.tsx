@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { AuthProvider, useAuth } from "./hooks/useAuthLaravel"
 import { AuthForm } from "./components/AuthForm"
 import { AdminPanel } from "./components/AdminPanel"
@@ -23,7 +23,16 @@ type ActiveSection = 'listsB2B' | 'listsB2C' | 'crm' | 'conversations' | 'agents
 
 function MainApp() {
   const { user, signOut, loading, isAdmin } = useAuth()
-  const [activeSection, setActiveSection] = useState<ActiveSection>('listsB2B')
+  const [activeSection, setActiveSection] = useState<ActiveSection>(() => {
+    // Restaurar seção salva no localStorage ao inicializar
+    const savedSection = localStorage.getItem('vai_active_section') as ActiveSection | null
+    return savedSection || 'listsB2B'
+  })
+
+  // Salvar seção no localStorage sempre que mudar
+  useEffect(() => {
+    localStorage.setItem('vai_active_section', activeSection)
+  }, [activeSection])
 
   if (loading) {
     return (
