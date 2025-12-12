@@ -32,32 +32,35 @@ interface Plan {
 }
 
 interface AgentFormData {
-  // QUEM ATENDE
+  // 0. NOME DO AGENTE (interno)
+  nome_agente_pnh: string
+
+  // 1. QUEM ATENDE
   agente_nome: string
   agente_funcao: string
   agente_jeito_falar: string
   agente_nao_fazer: string
 
-  // SOBRE A EMPRESA
+  // 2. SOBRE A EMPRESA
   empresa_nome: string
   empresa_o_que_faz: string
   empresa_diferenciais: string
   empresa_nao_faz: string
 
-  // PRODUTO/SERVIÇO
+  // 3. PRODUTO/SERVIÇO
   produto_o_que_e: string
   produto_funcionalidades: string
   produto_beneficios: string
   produto_publico: string
 
-  // PLANOS E PREÇOS
+  // 4. PLANOS E PREÇOS
   planos: Plan[]
   planos_teste_gratis: string
   planos_pagamento: string
   planos_reembolso: string
   planos_links: string
 
-  // COMO FUNCIONA
+  // 5. COMO FUNCIONA
   atendimento_objetivo: string
   atendimento_conducao: string
   atendimento_frases_sugeridas: string
@@ -90,6 +93,7 @@ export function Agents() {
   })
 
   const emptyFormData: AgentFormData = {
+    nome_agente_pnh: "",
     agente_nome: "",
     agente_funcao: "",
     agente_jeito_falar: "",
@@ -187,6 +191,7 @@ export function Agents() {
   const resetForm = () => {
     setFormData(emptyFormData)
     setExpandedSections({
+      nome_agente: true,
       quem_atende: true,
       sobre_empresa: false,
       sobre_produto: false,
@@ -226,7 +231,7 @@ export function Agents() {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          name: formData.agente_nome,
+          name: formData.nome_agente_pnh,
           data: formData,
           status: 'draft'
         })
@@ -298,7 +303,7 @@ export function Agents() {
 
   const duplicateAgent = async (agent: Agent) => {
     try {
-      const newData = { ...agent.data, agente_nome: `${agent.data.agente_nome} (Cópia)` }
+      const newData = { ...agent.data, nome_agente_pnh: `${agent.data.nome_agente_pnh} (Cópia)` }
       const response = await fetch(`${baseUrl}/agents`, {
         method: 'POST',
         headers: {
@@ -306,7 +311,7 @@ export function Agents() {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          name: newData.agente_nome,
+          name: newData.nome_agente_pnh,
           data: newData,
           status: 'draft'
         })
@@ -341,7 +346,7 @@ export function Agents() {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          name: formData.agente_nome,
+          name: formData.nome_agente_pnh,
           data: formData
         })
       })
@@ -455,8 +460,8 @@ export function Agents() {
                       <Input
                         id="nome_agente_pnh"
                         placeholder="Ex: Agente de Vendas 1, Bot de Suporte Premium, IA Consultora VIP"
-                        value={formData.agente_nome}
-                        onChange={(e) => handleFormChange('agente_nome', e.target.value)}
+                        value={formData.nome_agente_pnh}
+                        onChange={(e) => handleFormChange('nome_agente_pnh', e.target.value)}
                         className="border border-slate-300"
                       />
                     </div>
