@@ -472,8 +472,8 @@ export function ListGeneratorB2B() {
       return
     }
 
-    if (targetContactCount < 1 || targetContactCount > 999) {
-      setError('A quantidade de contatos deve estar entre 1 e 999')
+    if (targetContactCount < 1 || targetContactCount > 99) {
+      setError('A quantidade de contatos deve estar entre 1 e 99')
       return
     }
 
@@ -495,7 +495,7 @@ export function ListGeneratorB2B() {
 
     let totalGenerated = 0
     let attempts = 0
-    const maxAttempts = 20 // Limite de tentativas - após 20, sugerir ampliar regiões
+    const maxAttempts = 30 // Limite de tentativas - após 30, sugerir ampliar regiões
     let allGeneratedContacts: GeneratedContact[] = []
 
     try {
@@ -1799,7 +1799,7 @@ export function ListGeneratorB2B() {
                     id="contact-count"
                     type="number"
                     min="1"
-                    max="999"
+                    max="99"
                     value={targetContactCount}
                     onChange={(e) => {
                       const value = e.target.value
@@ -1808,7 +1808,7 @@ export function ListGeneratorB2B() {
                       } else {
                         const num = parseInt(value)
                         if (!isNaN(num)) {
-                          setTargetContactCount(Math.min(999, Math.max(1, num)))
+                          setTargetContactCount(Math.min(99, Math.max(1, num)))
                         }
                       }
                     }}
@@ -1819,7 +1819,7 @@ export function ListGeneratorB2B() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Mínimo: 1 | Máximo: 999
+                    Mínimo: 1 | Máximo: 99
                   </p>
                 </div>
               </CardContent>
