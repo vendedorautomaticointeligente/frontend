@@ -1,0 +1,35 @@
+import { createClient } from '@supabase/supabase-js'
+import { projectId, publicAnonKey } from './info'
+
+const supabaseUrl = `https://${projectId}.supabase.co`
+const supabaseAnonKey = publicAnonKey
+
+// Configure Supabase client with better error handling and retry logic
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: false,
+    // Increase timeout for slow connections
+    flowType: 'pkce'
+  },
+  global: {
+    headers: {
+      'x-application-name': 'VAI'
+    },
+    fetch: (url, options = {}) => {
+      console.log('🌐 Supabase Request:', url)
+      return fetch(url, {
+        ...options,
+        // Add a reasonable timeout
+        signal: AbortSignal.timeout(15000)
+      }).then(response => {
+        console.log('📡 Supabase Response:', response.status)
+        return response
+      }).catch(error => {
+        console.error('❌ Supabase Fetch Error:', error.message)
+        throw error
+      })
+    }
+  }
+})
