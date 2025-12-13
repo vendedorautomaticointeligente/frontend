@@ -24,7 +24,7 @@ WORKDIR /app
 RUN npm install -g serve
 
 # Copy built files from builder
-COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/build ./build
 
 # Expose port
 EXPOSE 5173
@@ -34,4 +34,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:5173 || exit 1
 
 # Start application
-CMD ["serve", "-s", "dist", "-l", "5173"]
+CMD ["serve", "-s", "build", "-l", "5173"]
