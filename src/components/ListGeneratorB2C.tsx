@@ -71,6 +71,8 @@ interface SocialContact {
   verified?: boolean
   category?: string
   addedAt?: string
+  extracted_from?: string
+  source_profile?: string
 }
 
 export function ListGeneratorB2C() {
@@ -148,12 +150,27 @@ export function ListGeneratorB2C() {
   const [currentContactCount, setCurrentContactCount] = useState(0)
   const [generationAttempts, setGenerationAttempts] = useState(0)
   const [cancelRequested, setCancelRequested] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
   
   // Messages
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+
+  // Timer effect for elapsed time display
+  useEffect(() => {
+    if (!isGeneratingWithMeta || !generationStartTime) return
+    
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const elapsed = Math.floor((now - generationStartTime) / 1000)
+      setElapsedSeconds(elapsed)
+    }, 100)
+    
+    return () => clearInterval(interval)
+  }, [isGeneratingWithMeta, generationStartTime])
 
   // Helper function to format phone number for WhatsApp
   const formatPhoneForWhatsApp = (phone: string): string => {
@@ -544,6 +561,8 @@ export function ListGeneratorB2C() {
     setSuccess(null)
     setCurrentContactCount(0)
     setGenerationAttempts(0)
+    setElapsedSeconds(0)
+    setGenerationStartTime(Date.now())
 
     await new Promise(resolve => setTimeout(resolve, 100))
 
@@ -551,9 +570,16 @@ export function ListGeneratorB2C() {
     let attempts = 0
     const maxAttempts = 30
     let allGeneratedProfiles: SocialContact[] = []
+    const startTime = Date.now()
+    const TIMEOUT_MS = 180 * 1000 // 180 seconds
 
     try {
-      while (totalGenerated < targetContactCount && attempts < maxAttempts && !cancelRequested) {
+      while (
+        totalGenerated < targetContactCount && 
+        attempts < maxAttempts && 
+        !cancelRequested && 
+        (Date.now() - startTime) < TIMEOUT_MS
+      ) {
         attempts++
         setGenerationAttempts(attempts)
         
@@ -632,11 +658,15 @@ export function ListGeneratorB2C() {
               setCurrentContactCount(totalGenerated)
               
               console.log(`✅ Added ${newProfiles.length} new profiles. Total: ${totalGenerated}/${targetContactCount}`)
-              
-              setSuccess(`🔄 Gerando perfis... ${totalGenerated}/${targetContactCount} (${Math.round(totalGenerated/targetContactCount*100)}%)`)
+              console.log(`📊 Details: Returned=${data.contacts.length}, Unique=${newProfiles.length}, Total Generated=${totalGenerated}`)
             } else {
               console.log(`ℹ️ No new unique profiles found in attempt ${attempts}`)
+              console.log(`📊 Details: Returned=${data.contacts.length}, But all were duplicates`)
             }
+            
+            // Sempre atualizar currentContactCount mesmo que não haja novos perfis
+            // Isso garante que a UI mostre o progresso mesmo com duplicatas
+            setCurrentContactCount(totalGenerated)
           }
 
           if (totalGenerated < targetContactCount && attempts < maxAttempts && !cancelRequested) {
@@ -679,9 +709,19 @@ export function ListGeneratorB2C() {
       }
 
       if (cancelRequested) {
-        setError('❌ Geração cancelada pelo usuário')
+        if (totalGenerated > 0) {
+          setGeneratedContacts(allGeneratedProfiles)
+          setShowResults(true)
+          setTimeout(() => loadSavedLists(), 500)
+          setError('⏹️ Geração cancelada. Contatos já gerados foram salvos automaticamente.')
+        } else {
+          setError('⏹️ Geração cancelada pelo usuário.')
+        }
         return
       }
+
+      const elapsedMs = Date.now() - startTime
+      const timedOut = elapsedMs >= TIMEOUT_MS && totalGenerated < targetContactCount
 
       if (totalGenerated >= targetContactCount) {
         setGeneratedContacts(allGeneratedProfiles.slice(0, targetContactCount))
@@ -691,6 +731,16 @@ export function ListGeneratorB2C() {
         
         setSuccess(`🎉 Meta atingida! ${targetContactCount} perfis gerados e adicionados à lista!`)
         console.log(`🎉 B2C Meta completed: ${targetContactCount} profiles in ${attempts} attempts`)
+      } else if (timedOut) {
+        if (totalGenerated > 0) {
+          setGeneratedContacts(allGeneratedProfiles)
+          setShowResults(true)
+          setTimeout(() => loadSavedLists(), 1000)
+          setSuccess(`⏱️ Limite de tempo (180s) atingido. ${totalGenerated} perfis encontrados de ${targetContactCount} solicitados. Salvando contatos extraídos...`)
+          console.log(`⏱️ B2C Timeout: ${totalGenerated} profiles generated before 180-second timeout`)
+        } else {
+          setError('❌ Tempo limite (180s) atingido sem encontrar perfis. Verifique os critérios de busca.')
+        }
       } else if (attempts >= maxAttempts) {
         if (totalGenerated > 0) {
           setGeneratedContacts(allGeneratedProfiles)
@@ -717,12 +767,23 @@ export function ListGeneratorB2C() {
     } finally {
       setIsGeneratingWithMeta(false)
       setCancelRequested(false)
+      setGenerationStartTime(null)
+      setElapsedSeconds(0)
     }
   }
 
   const cancelGeneration = () => {
     setCancelRequested(true)
-    setSuccess('🔄 Cancelando geração...')
+    setIsGeneratingWithMeta(false)
+    
+    if (currentContactCount > 0) {
+      // Se há contatos gerados, salva e exibe resultado
+      setSuccess(`⏹️ Geração cancelada. ${currentContactCount} perfis encontrados foram salvos.`)
+      setTimeout(() => loadSavedLists(), 500)
+    } else {
+      // Se não há contatos, apenas mostra mensagem
+      setError('❌ Geração cancelada. Nenhum perfil foi gerado.')
+    }
   }
 
   const exportToCSV = () => {
@@ -1091,132 +1152,85 @@ export function ListGeneratorB2C() {
           </div>
 
           {contacts.length > 0 ? (
-            <div className="grid gap-3 sm:gap-4">
-              {contacts.map((contact) => (
-                <Card key={contact.id} className="hover:shadow-md transition-shadow">
-                  <CardContent className="p-4 sm:p-6">
-                    <div className="flex flex-col sm:flex-row items-start gap-4">
-                      {/* Avatar and Name */}
-                      <div className="flex items-center gap-3 w-full sm:w-auto">
-                        <UserCircle className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground flex-shrink-0" />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold text-sm sm:text-base">{contact.name}</h3>
-                            {contact.verified && (
-                              <CheckCircle className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                            )}
-                            <Badge variant="outline" className="gap-1 text-xs">
-                              {contact.platform === 'instagram' ? (
-                                <>
-                                  <Instagram className="w-3 h-3" />
-                                  Instagram
-                                </>
-                              ) : (
-                                <>
-                                  <Linkedin className="w-3 h-3" />
-                                  LinkedIn
-                                </>
-                              )}
-                            </Badge>
-                          </div>
-                          <p className="text-xs sm:text-sm text-muted-foreground">@{contact.username}</p>
-                        </div>
-                      </div>
-
-                      {/* Contact Actions - URL / Usuário / Telefone / Email */}
-                      <div className="flex flex-wrap gap-2 w-full sm:w-auto sm:ml-auto">
-                        {/* URL - Ver Perfil */}
-                        {contact.profileUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2 text-xs flex-1 sm:flex-initial"
-                            onClick={() => window.open(contact.profileUrl, '_blank')}
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse border border-border">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="border border-border px-4 py-2 text-left text-xs sm:text-sm font-semibold">Usuário</th>
+                    <th className="border border-border px-4 py-2 text-left text-xs sm:text-sm font-semibold">Telefone</th>
+                    <th className="border border-border px-4 py-2 text-left text-xs sm:text-sm font-semibold">Email</th>
+                    <th className="border border-border px-4 py-2 text-left text-xs sm:text-sm font-semibold">Perfil de Origem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {contacts.map((contact) => (
+                    <tr key={contact.id} className="hover:bg-muted/50">
+                      <td className="border border-border px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="font-semibold text-xs sm:text-sm">{contact.name}</span>
+                          <a 
+                            href={contact.profileUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline text-xs"
                           >
-                            <Link className="w-3 h-3" />
-                            <span className="hidden sm:inline">Perfil</span>
-                          </Button>
-                        )}
-                        
-                        {/* Usuário - Copiar @ */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-2 text-xs flex-1 sm:flex-initial"
-                          onClick={() => {
-                            navigator.clipboard.writeText(`@${contact.username}`)
-                            toast.success('Usuário copiado!')
-                          }}
-                        >
-                          <UserCircle className="w-3 h-3" />
-                          <span className="hidden sm:inline">@{contact.username}</span>
-                          <span className="sm:hidden">Usuário</span>
-                        </Button>
-                        
-                        {/* Telefone - WhatsApp */}
-                        {contact.phone && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2 text-xs flex-1 sm:flex-initial"
-                            onClick={() => {
-                              const phoneNumber = contact.phone.replace(/\D/g, '')
-                              window.open(`https://wa.me/${phoneNumber}`, '_blank')
-                            }}
+                            @{contact.username}
+                          </a>
+                        </div>
+                      </td>
+                      <td className="border border-border px-4 py-3">
+                        {contact.phone ? (
+                          <a 
+                            href={`https://wa.me/${contact.phone.replace(/\D/g, '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline text-xs"
                           >
-                            <Phone className="w-3 h-3" />
-                            <span className="hidden sm:inline">{contact.phone}</span>
-                            <span className="sm:hidden">WhatsApp</span>
-                          </Button>
+                            {contact.phone}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
                         )}
-                        
-                        {/* Email - Mailto */}
-                        {contact.email && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="gap-2 text-xs flex-1 sm:flex-initial"
-                            onClick={() => window.location.href = `mailto:${contact.email}`}
+                      </td>
+                      <td className="border border-border px-4 py-3">
+                        {contact.email ? (
+                          <a 
+                            href={`mailto:${contact.email}`}
+                            className="text-blue-500 hover:underline text-xs"
                           >
-                            <Mail className="w-3 h-3" />
-                            <span className="hidden sm:inline">{contact.email}</span>
-                            <span className="sm:hidden">Email</span>
-                          </Button>
+                            {contact.email}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
                         )}
-                      </div>
-                    </div>
-
-                    {/* Bio - Abaixo dos botões */}
-                    {contact.bio && (
-                      <p className="text-xs sm:text-sm text-muted-foreground line-clamp-2 mt-3 pt-3 border-t">
-                        {contact.bio}
-                      </p>
-                    )}
-
-                    {/* Stats - Abaixo da bio */}
-                    <div className="flex flex-wrap gap-3 sm:gap-4 text-xs text-muted-foreground mt-2">
-                      {contact.followers !== undefined && (
-                        <div className="flex items-center gap-1">
-                          <Users className="w-3 h-3" />
-                          <span>{contact.followers.toLocaleString('pt-BR')} seguidores</span>
-                        </div>
-                      )}
-                      {contact.posts !== undefined && (
-                        <div className="flex items-center gap-1">
-                          <Hash className="w-3 h-3" />
-                          <span>{contact.posts} posts</span>
-                        </div>
-                      )}
-                      {contact.location && (
-                        <div className="flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          <span>{contact.location}</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                      </td>
+                      <td className="border border-border px-4 py-3">
+                        {contact.source_profile ? (
+                          <a 
+                            href={contact.source_profile} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline text-xs break-all"
+                          >
+                            {contact.extracted_from && `@${contact.extracted_from}`}
+                          </a>
+                        ) : contact.profileUrl && contact.platform !== 'instagram' ? (
+                          <a 
+                            href={contact.profileUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:underline text-xs break-all"
+                          >
+                            {contact.profileUrl.replace('https://', '')}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           ) : (
             <Card>
@@ -2058,56 +2072,38 @@ export function ListGeneratorB2C() {
 
             <div className="flex gap-2">
               {!isGeneratingWithMeta ? (
-                <>
-                  <Button
-                    onClick={searchSocialProfiles}
-                    disabled={
-                      isLoading || 
-                      !selectedList || 
-                      (extractionMode === 'by-followers' && !followerLink1.trim()) ||
-                      (extractionMode === 'by-niche' && platform === 'instagram' && !searchKeyword.trim()) ||
-                      (extractionMode === 'by-niche' && platform === 'linkedin' && (!jobTitle.trim() || !jobFunction.trim()))
-                    }
-                    className="flex-1 gap-2"
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        {extractionMode === 'by-followers' ? 'Extraindo...' : 'Buscando...'}
-                      </>
-                    ) : (
-                      <>
-                        <Search className="w-5 h-5" />
-                        {extractionMode === 'by-followers' ? 'Extrair Uma Vez' : 'Buscar Uma Vez'}
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    onClick={generateProfilesWithMeta}
-                    disabled={
-                      isLoading || 
-                      !selectedList || 
-                      (extractionMode === 'by-followers' && !followerLink1.trim()) ||
-                      (extractionMode === 'by-niche' && platform === 'instagram' && !searchKeyword.trim()) ||
-                      (extractionMode === 'by-niche' && platform === 'linkedin' && (!jobTitle.trim() || !jobFunction.trim()))
-                    }
-                    className="flex-1 gap-2"
-                    size="lg"
-                    variant="default"
-                  >
-                    <Target className="w-5 h-5" />
-                    Atingir Meta
-                  </Button>
-                </>
+                <Button
+                  onClick={generateProfilesWithMeta}
+                  disabled={
+                    isLoading || 
+                    !selectedList || 
+                    (extractionMode === 'by-followers' && !followerLink1.trim()) ||
+                    (extractionMode === 'by-niche' && platform === 'instagram' && !searchKeyword.trim()) ||
+                    (extractionMode === 'by-niche' && platform === 'linkedin' && (!jobTitle.trim() || !jobFunction.trim()))
+                  }
+                  className="flex-1 gap-2"
+                  size="lg"
+                  variant="default"
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="w-5 h-5" />
+                      Gerar Lista de Contatos
+                    </>
+                  )}
+                </Button>
               ) : (
                 <Button
                   onClick={cancelGeneration}
                   variant="destructive"
-                  className="flex-1 gap-2"
+                  className="flex-1"
                   size="lg"
                 >
-                  <Square className="w-5 h-5" />
                   Cancelar Geração
                 </Button>
               )}
@@ -2122,8 +2118,8 @@ export function ListGeneratorB2C() {
                         <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
                         <span className="font-medium">Gerando perfis...</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">
-                        Tentativa {generationAttempts}
+                      <span className="text-sm font-semibold text-purple-600">
+                        ⏱️ {elapsedSeconds}s / 180s
                       </span>
                     </div>
                     <div>
@@ -2264,9 +2260,6 @@ export function ListGeneratorB2C() {
                 </p>
                 <p>
                   💼 <strong>LinkedIn:</strong> Encontre profissionais, empreendedores e empresas.
-                </p>
-                <p>
-                  🎯 <strong>Atingir Meta:</strong> O sistema fará múltiplas buscas até completar a quantidade desejada.
                 </p>
                 <p>
                   🔍 <strong>Palavra-chave:</strong> Use termos relevantes para encontrar perfis relacionados.

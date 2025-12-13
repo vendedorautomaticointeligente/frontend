@@ -4,12 +4,10 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
 import { useAuth } from "../hooks/useAuthLaravel"
-import { AuthDiagnostics } from "./AuthDiagnostics"
 import { TroubleshootingGuide } from "./TroubleshootingGuide"
-import { Zap, Loader2, AlertCircle, Crown, Mail, Lock, User, Building, ChevronDown, HelpCircle, RefreshCw, Sparkles, TrendingUp, Shield } from "lucide-react"
+import { Zap, Loader2, AlertCircle, Mail, Lock, User, Building, HelpCircle } from "lucide-react"
 import { toast } from "sonner@2.0.3"
 
 export function AuthForm() {
@@ -64,28 +62,18 @@ export function AuthForm() {
     }
   }
 
-  const fillAdminCredentials = () => {
-    setFormData({
-      email: 'admin@vai.com.br',
-      password: 'Admin@VAI2025',
-      name: '',
-      company: ''
-    })
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-white">
       <div className="w-full max-w-md">
         <Card className="shadow-lg border border-vai-divider">
           <CardHeader className="text-center pb-6">
             <div className="flex justify-center mb-4">
-              <div className="flex items-center justify-center w-16 h-16 bg-gradient-to-br from-vai-blue-tech to-vai-blue-hover rounded-2xl shadow-md">
-                <Zap className="w-8 h-8 text-white" />
-              </div>
+              <img 
+                src="https://agencianovofoco.com.br/wp-content/uploads/2025/12/vai-azul.png" 
+                alt="VAI Logo" 
+                className="h-16 w-auto object-contain"
+              />
             </div>
-            <CardTitle className="text-3xl bg-gradient-to-r from-vai-blue-tech to-vai-blue-hover bg-clip-text text-transparent">
-              VAI
-            </CardTitle>
             <CardDescription>
               Vendedor Automático Inteligente
             </CardDescription>
@@ -171,20 +159,6 @@ export function AuthForm() {
                     )}
                   </Button>
                 </form>
-
-                <div className="pt-4 border-t space-y-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    size="sm"
-                    onClick={fillAdminCredentials}
-                    disabled={loading}
-                    className="w-full h-9 text-sm gap-2"
-                  >
-                    <Crown className="w-4 h-4" />
-                    Preencher Credenciais Admin
-                  </Button>
-                </div>
               </TabsContent>
               
               <TabsContent value="signup" className="space-y-4">
@@ -297,39 +271,6 @@ export function AuthForm() {
                 </form>
               </TabsContent>
             </Tabs>
-
-            <div className="mt-6 space-y-3">
-              <div className="p-4 bg-gradient-to-r from-yellow-50 to-yellow-100 border border-yellow-200 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
-                  <Crown className="w-4 h-4 text-yellow-600" />
-                  <p className="text-sm font-medium text-yellow-800">
-                    Credenciais Administrativas
-                  </p>
-                </div>
-                <div className="text-xs text-yellow-700 space-y-1">
-                  <p>📧 admin@vai.com.br</p>
-                  <p>🔒 Admin@VAI2025</p>
-                </div>
-              </div>
-
-              <Collapsible>
-                <CollapsibleTrigger asChild>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full text-xs flex items-center justify-between"
-                  >
-                    <span>Diagnóstico de Conexão</span>
-                    <ChevronDown className="w-4 h-4" />
-                  </Button>
-                </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3">
-                  <div className="p-3 border rounded-lg bg-muted/30">
-                    <AuthDiagnostics />
-                  </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </div>
           </CardContent>
         </Card>
       </div>

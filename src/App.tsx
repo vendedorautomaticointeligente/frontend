@@ -60,7 +60,8 @@ function MainApp() {
       key: 'listsB2C' as ActiveSection,
       icon: UserCircle,
       label: 'Listas B2C',
-      description: 'Instagram e LinkedIn'
+      description: 'Instagram e LinkedIn',
+      comingSoon: true
     },
     {
       key: 'crm' as ActiveSection,
@@ -104,18 +105,18 @@ function MainApp() {
       label: 'Minha Conta',
       description: 'Configurações e preferências'
     },
-    ...(isAdmin ? [{
-      key: 'admin' as ActiveSection,
-      icon: Crown,
-      label: 'Painel Admin',
-      description: 'Gerenciar usuários e sistema'
-    }] : []),
     {
       key: 'integrations' as ActiveSection,
       icon: Plug,
       label: 'Integrações',
       description: 'Conecte-se a outros sistemas'
-    }
+    },
+    ...(isAdmin ? [{
+      key: 'admin' as ActiveSection,
+      icon: Crown,
+      label: 'Painel Admin',
+      description: 'Gerenciar usuários e sistema'
+    }] : [])
   ]
 
   const renderContent = () => {
@@ -171,13 +172,21 @@ function MainApp() {
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.key}>
                   <SidebarMenuButton
-                    onClick={() => setActiveSection(item.key)}
+                    onClick={() => !item.comingSoon && setActiveSection(item.key)}
                     isActive={activeSection === item.key}
+                    disabled={item.comingSoon}
                     className="w-full justify-start h-12"
                   >
                     <item.icon className="w-5 h-5 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium">{item.label}</div>
+                    <div className="text-left flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{item.label}</span>
+                        {item.comingSoon && (
+                          <Badge variant="secondary" className="text-xs py-0 px-1.5 h-5">
+                            EM BREVE
+                          </Badge>
+                        )}
+                      </div>
                       <div className="text-xs text-muted-foreground">
                         {item.description}
                       </div>

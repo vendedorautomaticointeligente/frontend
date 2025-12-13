@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
-import { Button } from "./ui/button"
+import { Button as BaseButton } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
@@ -30,7 +30,6 @@ import {
   RefreshCw,
   AlertTriangle,
   Hash,
-  Square,
   LayoutGrid,
   LayoutList,
   Filter,
@@ -42,6 +41,9 @@ import {
   ArrowDown,
   Pencil
 } from "lucide-react"
+
+// Type assertion for Button with variant and size props
+const Button = BaseButton as any
 
 const ESTADOS_BRASIL = [
   { value: "AC", label: "Acre" },
@@ -99,6 +101,15 @@ interface GeneratedContact {
   cep?: string
   neighborhood?: string
   addedAt?: string
+  extra_data?: {
+    company?: string
+    address?: string
+    neighborhood?: string
+    cep?: string
+    cnpj?: string
+    segment?: string
+    email?: string
+  }
 }
 
 export function ListGeneratorB2B() {
@@ -142,10 +153,30 @@ export function ListGeneratorB2B() {
   const [currentContactCount, setCurrentContactCount] = useState(0)
   const [generationAttempts, setGenerationAttempts] = useState(0)
   const [cancelRequested, setCancelRequested] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
+  const [remainingSeconds, setRemainingSeconds] = useState(180) // 3:00 minutes
   
   // Messages
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  // Timer effect for elapsed time display and countdown
+  useEffect(() => {
+    if (!isGeneratingWithMeta || !generationStartTime) return
+    
+    const interval = setInterval(() => {
+      const now = Date.now()
+      const elapsed = Math.floor((now - generationStartTime) / 1000)
+      setElapsedSeconds(elapsed)
+      
+      // Update countdown timer (starts at 3:00)
+      const remaining = Math.max(0, 180 - elapsed)
+      setRemainingSeconds(remaining)
+    }, 100)
+    
+    return () => clearInterval(interval)
+  }, [isGeneratingWithMeta, generationStartTime])
 
   // Edit list states
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -279,12 +310,13 @@ export function ListGeneratorB2B() {
     } catch (error) {
       console.error('❌ Error loading lists:', error)
       
-      if (error.message.includes('401') || error.message.includes('Authorization')) {
+      const errorMsg = (error as Error).message || String(error)
+      if (errorMsg.includes('401') || errorMsg.includes('Authorization')) {
         setError('🔐 Sessão expirada. Faça login novamente.')
-      } else if (error.message.includes('Failed to fetch') || error.message.includes('não disponível')) {
+      } else if (errorMsg.includes('Failed to fetch') || errorMsg.includes('não disponível')) {
         setError('🌐 Servidor não disponível. Tente novamente em alguns momentos.')
       } else {
-        setError(`Erro ao carregar listas: ${error.message}`)
+        setError(`Erro ao carregar listas: ${errorMsg}`)
       }
       
       setSavedLists([])
@@ -304,6 +336,7 @@ export function ListGeneratorB2B() {
       console.log(`✅ Loaded ${data.cities?.length || 0} cities for ${state}`)
     } catch (error) {
       console.error('Error loading cities:', error)
+      const errorMsg = (error as Error).message || String(error)
       setError(`Erro ao carregar cidades para ${state}`)
       setCities([])
     } finally {
@@ -352,7 +385,8 @@ export function ListGeneratorB2B() {
       
     } catch (error) {
       console.error('Error creating list:', error)
-      setError(`Erro ao criar lista: ${error.message}`)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`Erro ao criar lista: ${errorMsg}`)
     } finally {
       setIsCreatingList(false)
     }
@@ -388,7 +422,8 @@ export function ListGeneratorB2B() {
       
     } catch (error) {
       console.error('Error deleting list:', error)
-      setError(`Erro ao excluir lista: ${error.message}`)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`Erro ao excluir lista: ${errorMsg}`)
     }
   }
 
@@ -440,7 +475,8 @@ export function ListGeneratorB2B() {
       
     } catch (error) {
       console.error('Error updating list:', error)
-      setError(`Erro ao atualizar lista: ${error.message}`)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`Erro ao atualizar lista: ${errorMsg}`)
     } finally {
       setIsUpdatingList(false)
     }
@@ -486,6 +522,8 @@ export function ListGeneratorB2B() {
     setSuccess(null)
     setCurrentContactCount(0)
     setGenerationAttempts(0)
+    setElapsedSeconds(0)
+    setGenerationStartTime(Date.now())
 
     // Small delay to ensure state is set
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -526,7 +564,7 @@ export function ListGeneratorB2B() {
             
             // Backend already filters duplicates from the list
             // This is an extra safety layer to filter duplicates within this generation session
-            const newContacts = normalizedContacts.filter(newContact => 
+            const newContacts = normalizedContacts.filter((newContact: GeneratedContact) => 
               !allGeneratedContacts.some(existing => 
                 (existing.cnpj && newContact.cnpj && existing.cnpj === newContact.cnpj) ||
                 (existing.company.toLowerCase() === newContact.company.toLowerCase())
@@ -565,12 +603,12 @@ export function ListGeneratorB2B() {
           console.error(`❌ Error in attempt ${attempts}:`, error)
           
           // Convert error to string for checking
-          const errorString = error.message || JSON.stringify(error)
+          const errorString = (error as Error).message || JSON.stringify(error)
           
           // Check if it's a rate limit error or API unavailable error
-          if (errorString.includes('429') || 
+          if (typeof errorString === 'string' && (errorString.includes('429') || 
               errorString.includes('Limite de requisições atingido') ||
-              errorString.includes('APIs de dados indisponíveis')) {
+              errorString.includes('APIs de dados indisponíveis'))) {
             console.log('⏰ Rate limit or API unavailable - stopping generation')
             
             if (errorString.includes('APIs de dados indisponíveis')) {
@@ -579,7 +617,7 @@ export function ListGeneratorB2B() {
               setError('⏰ Limite de requisições atingido. Por favor, aguarde alguns minutos antes de tentar novamente.')
             }
             break // Stop the loop completely
-          } else if (errorString.includes('Failed to fetch')) {
+          } else if (typeof errorString === 'string' && errorString.includes('Failed to fetch')) {
             console.log('🌐 Connection error, waiting...')
             await new Promise(resolve => setTimeout(resolve, 5000)) // 5 second delay for connection issues
           } else {
@@ -590,7 +628,17 @@ export function ListGeneratorB2B() {
       }
 
       if (cancelRequested) {
-        setError('❌ Geração cancelada pelo usuário')
+        // Save and show the contacts that were already generated
+        if (allGeneratedContacts.length > 0) {
+          setGeneratedContacts(allGeneratedContacts)
+          setShowResults(true)
+          setTimeout(() => loadSavedLists(), 1000)
+          setSuccess(`⏹️ Geração cancelada! ${allGeneratedContacts.length} contatos foram extraídos e salvos na lista.`)
+          console.log(`⏹️ Generation cancelled. ${allGeneratedContacts.length} contacts saved.`)
+        } else {
+          setError('❌ Geração cancelada pelo usuário. Nenhum contato foi extraído.')
+          console.log('⏹️ Generation cancelled. No contacts extracted.')
+        }
         return
       }
 
@@ -631,10 +679,12 @@ export function ListGeneratorB2B() {
 
     } catch (error) {
       console.error('❌ Critical error in meta generation:', error)
-      setError(`❌ Erro crítico na geração: ${error.message}`)
+      setError(`❌ Erro crítico na geração: ${(error as Error).message || String(error)}`)
     } finally {
       setIsGeneratingWithMeta(false)
       setCancelRequested(false)
+      setGenerationStartTime(null)
+      setElapsedSeconds(0)
     }
   }
 
@@ -653,20 +703,23 @@ export function ListGeneratorB2B() {
     return {
       ...contact,
       // Use extra_data if root level fields are missing
-      company: contact.company || contact.extra_data.company || contact.name,
-      address: contact.address || contact.extra_data.address || '',
-      neighborhood: contact.neighborhood || contact.extra_data.neighborhood || '',
-      cep: contact.cep || contact.extra_data.cep || '',
-      cnpj: contact.cnpj || contact.extra_data.cnpj || '',
-      segment: contact.segment || contact.extra_data.segment || '',
-      email: contact.email || contact.extra_data.email || ''
+      company: contact.company || contact.extra_data?.company || contact.name,
+      address: contact.address || contact.extra_data?.address || '',
+      neighborhood: contact.neighborhood || contact.extra_data?.neighborhood || '',
+      cep: contact.cep || contact.extra_data?.cep || '',
+      cnpj: contact.cnpj || contact.extra_data?.cnpj || '',
+      segment: contact.segment || contact.extra_data?.segment || '',
+      email: contact.email || contact.extra_data?.email || ''
     }
   }
 
   const cancelGeneration = () => {
+    // Set flag to stop generation loop
+    // The loop checks !cancelRequested condition and will exit on next iteration
+    // Already extracted contacts will be saved and displayed
     setCancelRequested(true)
     setError(null)
-    setSuccess(null)
+    setSuccess('⏹️ Parando geração de contatos...')
   }
 
   // REMOVED: saveContactsToList - contacts are now auto-saved by backend during generateLeads call
@@ -779,7 +832,8 @@ export function ListGeneratorB2B() {
       }
     } catch (error) {
       console.error('Error loading previous search info:', error)
-      setError(`Erro ao carregar informações anteriores: ${error.message}`)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`Erro ao carregar informações anteriores: ${errorMsg}`)
     } finally {
       setIsLoadingPreviousInfo(false)
     }
@@ -805,7 +859,8 @@ export function ListGeneratorB2B() {
       
     } catch (error) {
       console.error('Error loading list contacts:', error)
-      setError(`Erro ao carregar contatos: ${error.message}`)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`Erro ao carregar contatos: ${errorMsg}`)
     }
   }
 
@@ -1717,68 +1772,76 @@ export function ListGeneratorB2B() {
                   </Select>
                 </div>
 
-                {selectedState && (
-                  <div>
-                    <Label>Cidades* (múltipla seleção)</Label>
-                    <div className="mt-2 space-y-2">
-                      <Input
-                        placeholder="Buscar cidade..."
-                        value={citySearchTerm}
-                        onChange={(e) => setCitySearchTerm(e.target.value)}
-                        className="mb-2"
-                      />
-                      
-                      {selectedCities.length > 0 && (
-                        <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-md">
-                          {selectedCities.map((cityValue) => {
-                            const city = cities.find(c => c.value === cityValue)
-                            return (
-                              <Badge key={cityValue} variant="secondary" className="gap-2">
-                                {city?.label}
-                                <button
-                                  onClick={() => removeSelectedCity(cityValue)}
-                                  className="hover:text-destructive"
-                                >
-                                  <X className="w-3 h-3" />
-                                </button>
-                              </Badge>
-                            )
-                          })}
+                <div>
+                  <Label>Cidades* (múltipla seleção)</Label>
+                  {!selectedState && (
+                    <p className="text-xs text-muted-foreground mb-2">
+                      Selecione um estado acima para carregar as cidades disponíveis
+                    </p>
+                  )}
+                  <div className="mt-2 space-y-2">
+                    <Input
+                      placeholder="Buscar cidade..."
+                      value={citySearchTerm}
+                      onChange={(e) => setCitySearchTerm(e.target.value)}
+                      className="mb-2"
+                      disabled={!selectedState}
+                    />
+                    
+                    {selectedCities.length > 0 && (
+                      <div className="flex flex-wrap gap-2 p-3 bg-muted rounded-md">
+                        {selectedCities.map((cityValue) => {
+                          const city = cities.find(c => c.value === cityValue)
+                          return (
+                            <Badge key={cityValue} variant="secondary" className="gap-2">
+                              {city?.label}
+                              <button
+                                onClick={() => removeSelectedCity(cityValue)}
+                                className="hover:text-destructive"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </Badge>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <div className="border rounded-md max-h-48 overflow-y-auto">
+                      {!selectedState ? (
+                        <div className="p-4 text-center text-muted-foreground">
+                          Selecione um estado para ver as cidades disponíveis
+                        </div>
+                      ) : isLoadingCities ? (
+                        <div className="p-4 text-center text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
+                          Carregando cidades...
+                        </div>
+                      ) : filteredCities.length > 0 ? (
+                        <div className="p-2 space-y-1">
+                          {filteredCities.map((city) => (
+                            <label
+                              key={city.value}
+                              className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedCities.includes(city.value)}
+                                onChange={(e) => handleCityToggle(city.value, e.target.checked)}
+                                className="rounded"
+                              />
+                              <span className="text-sm">{city.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center text-muted-foreground text-sm">
+                          {citySearchTerm ? 'Nenhuma cidade encontrada' : 'Nenhuma cidade disponível'}
                         </div>
                       )}
-
-                      <div className="border rounded-md max-h-48 overflow-y-auto">
-                        {isLoadingCities ? (
-                          <div className="p-4 text-center text-muted-foreground">
-                            <Loader2 className="w-4 h-4 animate-spin mx-auto mb-2" />
-                            Carregando cidades...
-                          </div>
-                        ) : filteredCities.length > 0 ? (
-                          <div className="p-2 space-y-1">
-                            {filteredCities.map((city) => (
-                              <label
-                                key={city.value}
-                                className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selectedCities.includes(city.value)}
-                                  onChange={(e) => handleCityToggle(city.value, e.target.checked)}
-                                  className="rounded"
-                                />
-                                <span className="text-sm">{city.label}</span>
-                              </label>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="p-4 text-center text-muted-foreground text-sm">
-                            {citySearchTerm ? 'Nenhuma cidade encontrada' : 'Nenhuma cidade disponível'}
-                          </div>
-                        )}
-                      </div>
                     </div>
                   </div>
-                )}
+                </div>
 
                 <div>
                   <Label htmlFor="neighborhoods">Bairros (opcional)</Label>
@@ -1845,7 +1908,6 @@ export function ListGeneratorB2B() {
                   className="flex-1 gap-2"
                   size="lg"
                 >
-                  <Square className="w-5 h-5" />
                   Cancelar Geração
                 </Button>
               )}
@@ -1861,8 +1923,8 @@ export function ListGeneratorB2B() {
                         <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                         <span className="font-medium">Gerando contatos...</span>
                       </div>
-                      <span className="text-sm text-muted-foreground">
-                        Tentativa {generationAttempts}
+                      <span className="text-sm font-semibold text-blue-600">
+                        ⏱️ {Math.floor(remainingSeconds / 60)}:{String(remainingSeconds % 60).padStart(2, '0')}
                       </span>
                     </div>
                     <div>

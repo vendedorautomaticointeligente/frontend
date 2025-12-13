@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
-import { Button } from "./ui/button"
+import { Button as BaseButton } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
@@ -9,6 +9,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
+
+// Type assertion for Button with variant and size props
+const Button = BaseButton as any
 import { 
   Bot, 
   Plus, 
@@ -331,12 +334,57 @@ export function Agents() {
 
   const openEditDialog = (agent: Agent) => {
     setSelectedAgent(agent)
-    setFormData(agent.data)
+    
+    // Criar um sanitizer de dados para garantir que nenhum valor seja null/undefined
+    const sanitizeData = (data: any): AgentFormData => {
+      return {
+        nome_agente_pnh: data?.nome_agente_pnh ?? "",
+        agente_nome: data?.agente_nome ?? "",
+        agente_funcao: data?.agente_funcao ?? "",
+        agente_jeito_falar: data?.agente_jeito_falar ?? "",
+        agente_nao_fazer: data?.agente_nao_fazer ?? "",
+        empresa_nome: data?.empresa_nome ?? "",
+        empresa_o_que_faz: data?.empresa_o_que_faz ?? "",
+        empresa_diferenciais: data?.empresa_diferenciais ?? "",
+        empresa_nao_faz: data?.empresa_nao_faz ?? "",
+        produto_o_que_e: data?.produto_o_que_e ?? "",
+        produto_funcionalidades: data?.produto_funcionalidades ?? "",
+        produto_beneficios: data?.produto_beneficios ?? "",
+        produto_publico: data?.produto_publico ?? "",
+        planos: Array.isArray(data?.planos) && data.planos.length > 0 
+          ? data.planos.map((p: any) => ({
+              name: p?.name ?? "",
+              includes: p?.includes ?? "",
+              limits: p?.limits ?? "",
+              price: p?.price ?? "",
+              extras: p?.extras ?? ""
+            }))
+          : [{ name: "", includes: "", limits: "", price: "" }],
+        planos_teste_gratis: data?.planos_teste_gratis ?? "",
+        planos_pagamento: data?.planos_pagamento ?? "",
+        planos_reembolso: data?.planos_reembolso ?? "",
+        planos_links: data?.planos_links ?? "",
+        atendimento_objetivo: data?.atendimento_objetivo ?? "",
+        atendimento_conducao: data?.atendimento_conducao ?? "",
+        atendimento_frases_sugeridas: data?.atendimento_frases_sugeridas ?? "",
+        atendimento_evitar: data?.atendimento_evitar ?? "",
+        atendimento_resposta_padrao_fora_escopo: data?.atendimento_resposta_padrao_fora_escopo ?? ""
+      }
+    }
+    
+    const mergedData = sanitizeData(agent.data)
+    setFormData(mergedData)
     setShowEditDialog(true)
+    console.log('Opening edit dialog with sanitized agent data:', mergedData)
   }
 
   const updateAgent = async () => {
-    if (!selectedAgent || !validateForm()) return
+    if (!selectedAgent) {
+      toast.error('Nenhum agente selecionado')
+      return
+    }
+
+    if (!validateForm()) return
 
     if (!accessToken) {
       toast.error('Token não encontrado. Faça login novamente.')
@@ -344,6 +392,33 @@ export function Agents() {
     }
 
     try {
+      // Sanitizar dados antes de enviar (converter null para "")
+      const sanitizedData = {
+        nome_agente_pnh: formData.nome_agente_pnh || "",
+        agente_nome: formData.agente_nome || "",
+        agente_funcao: formData.agente_funcao || "",
+        agente_jeito_falar: formData.agente_jeito_falar || "",
+        agente_nao_fazer: formData.agente_nao_fazer || "",
+        empresa_nome: formData.empresa_nome || "",
+        empresa_o_que_faz: formData.empresa_o_que_faz || "",
+        empresa_diferenciais: formData.empresa_diferenciais || "",
+        empresa_nao_faz: formData.empresa_nao_faz || "",
+        produto_o_que_e: formData.produto_o_que_e || "",
+        produto_funcionalidades: formData.produto_funcionalidades || "",
+        produto_beneficios: formData.produto_beneficios || "",
+        produto_publico: formData.produto_publico || "",
+        planos: formData.planos || [{ name: "", includes: "", limits: "", price: "" }],
+        planos_teste_gratis: formData.planos_teste_gratis || "",
+        planos_pagamento: formData.planos_pagamento || "",
+        planos_reembolso: formData.planos_reembolso || "",
+        planos_links: formData.planos_links || "",
+        atendimento_objetivo: formData.atendimento_objetivo || "",
+        atendimento_conducao: formData.atendimento_conducao || "",
+        atendimento_frases_sugeridas: formData.atendimento_frases_sugeridas || "",
+        atendimento_evitar: formData.atendimento_evitar || "",
+        atendimento_resposta_padrao_fora_escopo: formData.atendimento_resposta_padrao_fora_escopo || ""
+      }
+
       const response = await fetch(`${baseUrl}/agents/${selectedAgent.id}`, {
         method: 'PUT',
         headers: {
@@ -351,8 +426,8 @@ export function Agents() {
           'Authorization': `Bearer ${accessToken}`
         },
         body: JSON.stringify({
-          name: formData.nome_agente_pnh,
-          data: formData
+          name: sanitizedData.nome_agente_pnh,
+          data: sanitizedData
         })
       })
 
@@ -360,13 +435,16 @@ export function Agents() {
         await loadAgents()
         setShowEditDialog(false)
         resetForm()
-        toast.success('Agente atualizado!')
+        toast.success('Agente atualizado com sucesso!')
+        console.log('✅ Agent updated successfully')
       } else {
-        toast.error('Erro ao atualizar agente')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Update error response:', errorData)
+        toast.error(errorData?.message || errorData?.error || 'Erro ao atualizar agente')
       }
     } catch (error) {
       console.error('Error updating agent:', error)
-      toast.error('Erro ao atualizar agente')
+      toast.error(`Erro ao atualizar agente: ${(error as Error).message}`)
     }
   }
 
@@ -1041,7 +1119,18 @@ export function Agents() {
         )}
 
         {/* Edit Dialog */}
-        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <Dialog 
+          open={showEditDialog} 
+          onOpenChange={(open: boolean) => {
+            if (!open) {
+              setShowEditDialog(false)
+              resetForm()
+              setSelectedAgent(null)
+            } else {
+              setShowEditDialog(true)
+            }
+          }}
+        >
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Editar Agente</DialogTitle>
