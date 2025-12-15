@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Textarea } from './ui/textarea'
-import { MessageSquare, Phone, Instagram, Facebook, QrCode, Check, X, Loader2, AlertCircle, Zap, Plug, RefreshCw, Settings, Smartphone } from 'lucide-react'
+import { MessageSquare, Phone, Instagram, Facebook, QrCode, Check, X, Loader2, AlertCircle, Zap, Plug, RefreshCw, Settings, Smartphone, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDate } from '../utils/formatters'
 import { QRCodeCanvas } from './ui/qrcode'
@@ -58,7 +58,7 @@ export function Integrations() {
 
   const loadWhatsAppConnections = async () => {
     try {
-      const response = await fetch(`${baseUrl}/evolution/instances`, {
+      const response = await fetch(`${baseUrl}/whatsapp/connections`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -66,7 +66,7 @@ export function Integrations() {
 
       if (response.ok) {
         const data = await response.json()
-        setWhatsappConnections(data.instances || data || [])
+        setWhatsappConnections(data.connections || data || [])
       }
     } catch (error) {
       console.error('Error loading WhatsApp connections:', error)
@@ -267,27 +267,67 @@ export function Integrations() {
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-slate-700">Números Conectados</p>
                 {whatsappConnections.map((connection: any, index: number) => (
-                  <div key={index} className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                        <Smartphone className="w-5 h-5 text-green-600" />
-                      </div>
-                      <div>
+                  <div key={connection.id || index} className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-3 flex-1">
+                      {connection.profilePicUrl ? (
+                        <img 
+                          src={connection.profilePicUrl} 
+                          alt={connection.connectionName}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                          <Smartphone className="w-5 h-5 text-green-600" />
+                        </div>
+                      )}
+                      <div className="flex-1">
                         <p className="font-medium text-green-900">
-                          {connection.instance || connection.phone || 'Instância'}
+                          {connection.connectionName || 'Sem nome'}
                         </p>
-                        <p className="text-xs text-green-600">
-                          {connection.state === 'open' ? '✓ Ativo' : '• Inativo'}
+                        <p className="text-sm text-green-700 font-mono">
+                          {connection.phoneNumber ? `+${connection.phoneNumber}` : 'Número não disponível'}
+                        </p>
+                        <p className="text-xs text-green-600 mt-1">
+                          {connection.connectionStatus === 'open' ? '✓ Ativo' : '• Inativo'}
                         </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {connection.state === 'open' && (
+                      {connection.connectionStatus === 'open' && (
                         <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
                           <Check className="w-3 h-3 mr-1" />
                           Ativo
                         </Badge>
                       )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={async () => {
+                          if (confirm(`Desconectar ${connection.connectionName}?`)) {
+                            try {
+                              const deleteResponse = await fetch(`${baseUrl}/whatsapp/disconnect/${connection.id}`, {
+                                method: 'DELETE',
+                                headers: {
+                                  'Authorization': `Bearer ${accessToken}`
+                                }
+                              })
+                              
+                              if (deleteResponse.ok) {
+                                toast.success('Conexão desconectada com sucesso')
+                                await loadWhatsAppConnections()
+                              } else {
+                                toast.error('Erro ao desconectar')
+                              }
+                            } catch (error) {
+                              console.error('Error disconnecting:', error)
+                              toast.error('Erro ao desconectar')
+                            }
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -364,6 +404,10 @@ export function Integrations() {
                               try {
                                 setQrLoading(true)
                                 
+                                // Salvar nome da conexão em variável local para depois salvar no backend
+                                const connectionName = whatsappName
+                                const connectionNumber = whatsappNumber
+                                
                                 // Chama o backend para criar instância e gerar QR Code
                                 const response = await fetch(`${baseUrl}/whatsapp/generate-qr`, {
                                   method: 'POST',
@@ -372,7 +416,8 @@ export function Integrations() {
                                     'Authorization': `Bearer ${accessToken}`
                                   },
                                   body: JSON.stringify({
-                                    number: whatsappNumber
+                                    number: whatsappNumber,
+                                    name: whatsappName  // Enviar o nome junto
                                   })
                                 })
 
@@ -408,8 +453,9 @@ export function Integrations() {
                                         
                                         // Continua polling para verificar se conectou
                                         let connectionAttempts = 0
-                                        const maxConnectionAttempts = 90
+                                        const maxConnectionAttempts = 20
                                         let checkConnection: NodeJS.Timeout | null = null
+                                        let confirmedConnected = false
                                         
                                         checkConnection = setInterval(async () => {
                                           connectionAttempts++
@@ -423,18 +469,57 @@ export function Integrations() {
                                             const statusResult = await statusResponse.json()
                                             
                                             if (statusResult.connected) {
-                                              if (checkConnection) clearInterval(checkConnection)
-                                              setIsConnecting(false)
-                                              setShowWhatsAppDialog(false)
-                                              toast.success('✓ WhatsApp conectado com sucesso!')
-                                              await loadIntegrations()
-                                              await loadWhatsAppConnections()
-                                              
-                                              setWhatsappName('')
-                                              setWhatsappNumber('')
-                                              setQrCode(null)
-                                              setSessionId(null)
-                                              return
+                                              // Triple validation: confirm connection status THREE times before closing
+                                              if (!confirmedConnected) {
+                                                confirmedConnected = true
+                                                console.log('[1/3] Connection detected, waiting 10s for first confirmation...')
+                                                // Wait 10000ms and check again to confirm
+                                                setTimeout(async () => {
+                                                  try {
+                                                    const confirm1Response = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                      headers: {
+                                                        'Authorization': `Bearer ${accessToken}`
+                                                      }
+                                                    })
+                                                    const confirm1Result = await confirm1Response.json()
+                                                    
+                                                    if (confirm1Result.connected) {
+                                                      console.log('[2/3] First confirmation OK, waiting 10s for second confirmation...')
+                                                      // Wait another 10s for second confirmation
+                                                      setTimeout(async () => {
+                                                        try {
+                                                          const confirm2Response = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                            headers: {
+                                                              'Authorization': `Bearer ${accessToken}`
+                                                            }
+                                                          })
+                                                          const confirm2Result = await confirm2Response.json()
+                                                          
+                                                          if (confirm2Result.connected) {
+                                                            console.log('[3/3] Second confirmation OK, closing modal')
+                                                            // Fully confirmed! Close modal
+                                                            if (checkConnection) clearInterval(checkConnection)
+                                                            setIsConnecting(false)
+                                                            setShowWhatsAppDialog(false)
+                                                            toast.success('✓ WhatsApp conectado com sucesso!')
+                                                            await loadIntegrations()
+                                                            await loadWhatsAppConnections()
+                                                            
+                                                            setWhatsappName('')
+                                                            setWhatsappNumber('')
+                                                            setQrCode(null)
+                                                            setSessionId(null)
+                                                          }
+                                                        } catch (error) {
+                                                          console.error('Error in second confirmation:', error)
+                                                        }
+                                                      }, 10000)
+                                                    }
+                                                  } catch (error) {
+                                                    console.error('Error in first confirmation:', error)
+                                                  }
+                                                }, 10000)
+                                              }
                                             } else if (connectionAttempts >= maxConnectionAttempts) {
                                               if (checkConnection) clearInterval(checkConnection)
                                               setIsConnecting(false)
@@ -443,7 +528,7 @@ export function Integrations() {
                                           } catch (error) {
                                             console.error('Error checking connection:', error)
                                           }
-                                        }, 2000)
+                                        }, 6000)
                                       } else if (attempts >= maxAttempts) {
                                         clearInterval(pollQr)
                                         setQrLoading(false)
@@ -464,8 +549,9 @@ export function Integrations() {
                                   
                                   // Polling para verificar se conectou
                                   let connectionAttempts = 0
-                                  const maxConnectionAttempts = 90
+                                  const maxConnectionAttempts = 20
                                   let checkConnection: NodeJS.Timeout | null = null
+                                  let confirmedConnected = false
                                   
                                   checkConnection = setInterval(async () => {
                                     connectionAttempts++
@@ -479,18 +565,57 @@ export function Integrations() {
                                       const statusResult = await statusResponse.json()
                                       
                                       if (statusResult.connected) {
-                                        if (checkConnection) clearInterval(checkConnection)
-                                        setIsConnecting(false)
-                                        setShowWhatsAppDialog(false)
-                                        toast.success('✓ WhatsApp conectado com sucesso!')
-                                        await loadIntegrations()
-                                        await loadWhatsAppConnections()
-                                        
-                                        setWhatsappName('')
-                                        setWhatsappNumber('')
-                                        setQrCode(null)
-                                        setSessionId(null)
-                                        return
+                                        // Triple validation: confirm connection status THREE times before closing
+                                        if (!confirmedConnected) {
+                                          confirmedConnected = true
+                                          console.log('[1/3] Connection detected, waiting 10s for first confirmation...')
+                                          // Wait 3000ms and check again to confirm
+                                          setTimeout(async () => {
+                                            try {
+                                              const confirm1Response = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                headers: {
+                                                  'Authorization': `Bearer ${accessToken}`
+                                                }
+                                              })
+                                              const confirm1Result = await confirm1Response.json()
+                                              
+                                              if (confirm1Result.connected) {
+                                                console.log('[2/3] First confirmation OK, waiting 10s for second confirmation...')
+                                                // Wait another 3s for second confirmation
+                                                setTimeout(async () => {
+                                                  try {
+                                                    const confirm2Response = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                      headers: {
+                                                        'Authorization': `Bearer ${accessToken}`
+                                                      }
+                                                    })
+                                                    const confirm2Result = await confirm2Response.json()
+                                                    
+                                                    if (confirm2Result.connected) {
+                                                      console.log('[3/3] Second confirmation OK, closing modal')
+                                                      // Fully confirmed! Close modal
+                                                      if (checkConnection) clearInterval(checkConnection)
+                                                      setIsConnecting(false)
+                                                      setShowWhatsAppDialog(false)
+                                                      toast.success('✓ WhatsApp conectado com sucesso!')
+                                                      await loadIntegrations()
+                                                      await loadWhatsAppConnections()
+                                                      
+                                                      setWhatsappName('')
+                                                      setWhatsappNumber('')
+                                                      setQrCode(null)
+                                                      setSessionId(null)
+                                                    }
+                                                  } catch (error) {
+                                                    console.error('Error in second confirmation:', error)
+                                                  }
+                                                }, 10000)
+                                              }
+                                            } catch (error) {
+                                              console.error('Error in first confirmation:', error)
+                                            }
+                                          }, 10000)
+                                        }
                                       } else if (connectionAttempts >= maxConnectionAttempts) {
                                         if (checkConnection) clearInterval(checkConnection)
                                         setIsConnecting(false)
@@ -499,7 +624,7 @@ export function Integrations() {
                                     } catch (error) {
                                       console.error('Error checking connection:', error)
                                     }
-                                  }, 2000)
+                                  }, 6000)
                                 } else {
                                   setQrLoading(false)
                                   toast.error(result.error || 'Erro ao gerar QR Code')
@@ -697,6 +822,7 @@ export function Integrations() {
                                         setQrLoading(false)
                                         toast.success('QR Code gerado! Escaneie com seu WhatsApp')
                                         
+                                        let confirmedConnected = false
                                         const checkConnection = setInterval(async () => {
                                           try {
                                             const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
@@ -708,22 +834,43 @@ export function Integrations() {
                                             const statusResult = await statusResponse.json()
                                             
                                             if (statusResult.connected) {
-                                              clearInterval(checkConnection)
-                                              setIsConnecting(false)
-                                              setShowWhatsAppDialog(false)
-                                              toast.success('✓ WhatsApp conectado com sucesso!')
-                                              await loadIntegrations()
-                                              await loadWhatsAppConnections()
-                                              
-                                              setWhatsappName('')
-                                              setWhatsappNumber('')
-                                              setQrCode(null)
-                                              setSessionId(null)
+                                              // Double validation: confirm connection status twice before closing
+                                              if (!confirmedConnected) {
+                                                confirmedConnected = true
+                                                // Wait 2000ms and check again to confirm
+                                                setTimeout(async () => {
+                                                  try {
+                                                    const confirmResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                      headers: {
+                                                        'Authorization': `Bearer ${accessToken}`
+                                                      }
+                                                    })
+                                                    const confirmResult = await confirmResponse.json()
+                                                    
+                                                    if (confirmResult.connected) {
+                                                      // Confirmed! Close modal
+                                                      clearInterval(checkConnection)
+                                                      setIsConnecting(false)
+                                                      setShowWhatsAppDialog(false)
+                                                      toast.success('✓ WhatsApp conectado com sucesso!')
+                                                      await loadIntegrations()
+                                                      await loadWhatsAppConnections()
+                                                      
+                                                      setWhatsappName('')
+                                                      setWhatsappNumber('')
+                                                      setQrCode(null)
+                                                      setSessionId(null)
+                                                    }
+                                                  } catch (error) {
+                                                    console.error('Error confirming connection:', error)
+                                                  }
+                                                }, 6000)
+                                              }
                                             }
                                           } catch (error) {
                                             console.error('Error checking connection:', error)
                                           }
-                                        }, 2000)
+                                        }, 6000)
                                         
                                         setTimeout(() => clearInterval(checkConnection), 180000)
                                       } else if (attempts >= maxAttempts) {
@@ -743,6 +890,7 @@ export function Integrations() {
                                   setQrLoading(false)
                                   toast.success('QR Code gerado! Escaneie com seu WhatsApp')
                                   
+                                  let confirmedConnected = false
                                   const checkConnection = setInterval(async () => {
                                     try {
                                       const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
@@ -754,22 +902,43 @@ export function Integrations() {
                                       const statusResult = await statusResponse.json()
                                       
                                       if (statusResult.connected) {
-                                        clearInterval(checkConnection)
-                                        setIsConnecting(false)
-                                        setShowWhatsAppDialog(false)
-                                        toast.success('✓ WhatsApp conectado com sucesso!')
-                                        await loadIntegrations()
-                                        await loadWhatsAppConnections()
-                                        
-                                        setWhatsappName('')
-                                        setWhatsappNumber('')
-                                        setQrCode(null)
-                                        setSessionId(null)
+                                        // Double validation: confirm connection status twice before closing
+                                        if (!confirmedConnected) {
+                                          confirmedConnected = true
+                                          // Wait 2000ms and check again to confirm
+                                          setTimeout(async () => {
+                                            try {
+                                              const confirmResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                                headers: {
+                                                  'Authorization': `Bearer ${accessToken}`
+                                                }
+                                              })
+                                              const confirmResult = await confirmResponse.json()
+                                              
+                                              if (confirmResult.connected) {
+                                                // Confirmed! Close modal
+                                                clearInterval(checkConnection)
+                                                setIsConnecting(false)
+                                                setShowWhatsAppDialog(false)
+                                                toast.success('✓ WhatsApp conectado com sucesso!')
+                                                await loadIntegrations()
+                                                await loadWhatsAppConnections()
+                                                
+                                                setWhatsappName('')
+                                                setWhatsappNumber('')
+                                                setQrCode(null)
+                                                setSessionId(null)
+                                              }
+                                            } catch (error) {
+                                              console.error('Error confirming connection:', error)
+                                            }
+                                          }, 6000)
+                                        }
                                       }
                                     } catch (error) {
                                       console.error('Error checking connection:', error)
                                     }
-                                  }, 2000)
+                                  }, 6000)
                                   
                                   setTimeout(() => clearInterval(checkConnection), 180000)
                                 } else {
