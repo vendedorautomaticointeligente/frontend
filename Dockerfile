@@ -26,14 +26,15 @@ COPY --from=builder /app/build /usr/share/nginx/html
 # Copy nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# Install curl for healthcheck
+RUN apk add --no-cache curl
+
 # Expose port
 EXPOSE 80
 
-# Health check using wget (install if needed) or simple tcp check
-RUN apk add --no-cache curl
+# Health check
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost/ || exit 1
 
-# Version: 1.0
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]
