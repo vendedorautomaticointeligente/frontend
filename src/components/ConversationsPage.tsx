@@ -32,6 +32,8 @@ type Conversation = {
   phone?: string
   email?: string
   segment?: string
+  whatsappInstanceName?: string
+  phoneNumber?: string
 }
 
 // Mock data - Conversas simuladas
@@ -64,12 +66,24 @@ export function ConversationsPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(mockConversations[0])
   const [searchQuery, setSearchQuery] = useState('')
   const [messageInput, setMessageInput] = useState('')
+  const [selectedPhoneFilter, setSelectedPhoneFilter] = useState<string | null>(null)
+
+  // Extrair números únicos de todas as conversas
+  const uniquePhoneNumbers = Array.from(new Set(
+    mockConversations
+      .filter(c => c.phoneNumber)
+      .map(c => c.phoneNumber!)
+  )).sort()
 
   // Filter conversations
-  const filteredConversations = mockConversations.filter(conv => 
-    conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    conv.company?.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredConversations = mockConversations.filter(conv => {
+    const matchesSearch = conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.company?.toLowerCase().includes(searchQuery.toLowerCase())
+    
+    const matchesPhone = !selectedPhoneFilter || conv.phoneNumber === selectedPhoneFilter
+    
+    return matchesSearch && matchesPhone
+  })
 
   const handleSendMessage = () => {
     if (!messageInput.trim()) return
@@ -103,7 +117,7 @@ export function ConversationsPage() {
         {/* Conversations List */}
         <div className="w-96 bg-white border-r border-gray-200 flex flex-col">
           {/* Search */}
-          <div className="p-4 border-b border-gray-200">
+          <div className="p-4 border-b border-gray-200 space-y-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <Input
@@ -113,6 +127,46 @@ export function ConversationsPage() {
                 className="pl-10"
               />
             </div>
+
+            {/* Phone Filter */}
+            {uniquePhoneNumbers.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-vai-text-secondary uppercase">
+                  Filtrar por número
+                </label>
+                <div className="space-y-2 max-h-32 overflow-y-auto">
+                  <button
+                    onClick={() => setSelectedPhoneFilter(null)}
+                    className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
+                      selectedPhoneFilter === null
+                        ? 'bg-vai-blue-tech text-white'
+                        : 'bg-gray-100 text-vai-text-primary hover:bg-gray-200'
+                    }`}
+                  >
+                    Todos os números
+                  </button>
+                  {uniquePhoneNumbers.map((phone) => (
+                    <button
+                      key={phone}
+                      onClick={() => setSelectedPhoneFilter(phone)}
+                      className={`w-full text-left px-3 py-2 rounded text-sm transition-colors flex items-center justify-between ${
+                        selectedPhoneFilter === phone
+                          ? 'bg-vai-blue-tech text-white'
+                          : 'bg-gray-100 text-vai-text-primary hover:bg-gray-200'
+                      }`}
+                    >
+                      <span>+{phone}</span>
+                      <Badge 
+                        variant="outline" 
+                        className="text-xs ml-2"
+                      >
+                        {mockConversations.filter(c => c.phoneNumber === phone).length}
+                      </Badge>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Conversations List */}
@@ -144,9 +198,16 @@ export function ConversationsPage() {
                 <div className="flex-1 min-w-0 text-left">
                   <div className="flex items-start justify-between mb-1">
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm text-vai-text-primary truncate">
-                        {conversation.name}
-                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-sm text-vai-text-primary truncate">
+                          {conversation.name}
+                        </p>
+                        {conversation.phoneNumber && (
+                          <Badge variant="outline" className="text-xs flex-shrink-0 bg-green-50 text-green-700 border-green-200">
+                            +{conversation.phoneNumber}
+                          </Badge>
+                        )}
+                      </div>
                       {conversation.company && (
                         <p className="text-xs text-vai-text-secondary truncate">
                           {conversation.company}
@@ -200,6 +261,11 @@ export function ConversationsPage() {
                     >
                       {channelConfig[selectedConversation.channel].name}
                     </Badge>
+                    {selectedConversation.phoneNumber && (
+                      <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                        📱 +{selectedConversation.phoneNumber}
+                      </Badge>
+                    )}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-vai-text-secondary mt-1">
                     {selectedConversation.company && (
