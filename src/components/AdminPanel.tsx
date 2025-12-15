@@ -7,7 +7,7 @@ import { Badge } from "./ui/badge"
 import { Alert, AlertDescription } from "./ui/alert"
 import { ConnectionStatus } from "./ConnectionStatus"
 import { useAuth } from "../hooks/useAuthLaravel"
-import { toast } from "sonner@2.0.3"
+import { toast } from "sonner"
 import { 
   Users, 
   Crown, 

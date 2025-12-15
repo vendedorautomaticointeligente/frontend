@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Progress } from "./ui/progress"
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
-import { toast } from "sonner@2.0.3"
+import { toast } from "sonner"
 import { 
   Send, 
   Plus, 

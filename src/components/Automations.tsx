@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Separator } from "./ui/separator"
 import { Checkbox } from "./ui/checkbox"
 import { useAuth } from "../hooks/useAuthLaravel"
-import { toast } from "sonner@2.0.3"
+import { toast } from "sonner"
 import { 
   Zap, 
   Plus, 

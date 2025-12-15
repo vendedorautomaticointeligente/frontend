@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAuth } from "../hooks/useAuthLaravel"
 import { TroubleshootingGuide } from "./TroubleshootingGuide"
 import { Zap, Loader2, AlertCircle, Mail, Lock, User, Building, HelpCircle } from "lucide-react"
-import { toast } from "sonner@2.0.3"
+import { toast } from "sonner"
 
 export function AuthForm() {
   const { signIn, signUp, loading } = useAuth()

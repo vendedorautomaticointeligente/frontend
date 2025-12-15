@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
-import { toast } from "sonner@2.0.3"
+import { toast } from "sonner"
 import { EmptyState } from "./EmptyState"
 import { LoadingState } from "./LoadingState"
 import { StatsCard } from "./StatsCard"
