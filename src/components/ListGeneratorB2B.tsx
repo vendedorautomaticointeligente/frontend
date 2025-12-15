@@ -1438,12 +1438,12 @@ export function ListGeneratorB2B() {
                             <td className="px-3 sm:px-6 py-2 sm:py-4">
                               <div className="flex items-start gap-2 sm:gap-3">
                                 <Building2 className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground mt-0.5 flex-shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-xs sm:text-sm font-medium truncate max-w-[150px] sm:max-w-none">
+                                <div className="min-w-0 max-w-xs">
+                                  <p className="text-xs sm:text-sm font-medium truncate">
                                     {contact.company}
                                   </p>
                                   {contact.segment && (
-                                    <p className="text-xs text-muted-foreground truncate max-w-[150px] sm:max-w-none">
+                                    <p className="text-xs text-muted-foreground truncate">
                                       {contact.segment}
                                     </p>
                                   )}

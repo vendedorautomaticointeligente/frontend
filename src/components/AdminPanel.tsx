@@ -7,6 +7,7 @@ import { Badge } from "./ui/badge"
 import { Alert, AlertDescription } from "./ui/alert"
 import { ConnectionStatus } from "./ConnectionStatus"
 import { useAuth } from "../hooks/useAuthLaravel"
+import { formatDate } from "../utils/formatters"
 import { toast } from "sonner"
 import { 
   Users, 
@@ -403,9 +404,9 @@ export function AdminPanel() {
                   <p>• Tentativas de conexão: {connection.retryCount}</p>
                   <p>• Navegador online: {navigator.onLine ? 'Sim' : 'Não'}</p>
                   {connection.lastSuccess && (
-                    <p>• Última conexão: {new Date(connection.lastSuccess).toLocaleString('pt-BR')}</p>
+                    <p>• Última conexão: {formatDate(new Date(connection.lastSuccess))}</p>
                   )}
-                  <p>• Última verificação: {new Date().toLocaleString('pt-BR')}</p>
+                  <p>• Última verificação: {formatDate(new Date())}</p>
                 </div>
               </div>
             </div>

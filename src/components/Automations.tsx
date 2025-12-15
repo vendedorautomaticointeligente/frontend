@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Separator } from "./ui/separator"
 import { Checkbox } from "./ui/checkbox"
 import { useAuth } from "../hooks/useAuthLaravel"
+import { formatDate } from "../utils/formatters"
 import { toast } from "sonner"
 import { 
   Zap, 
@@ -760,7 +761,7 @@ export function Automations() {
 
                   {automation.lastRun && (
                     <div className="text-xs text-muted-foreground">
-                      Última execução: {new Date(automation.lastRun).toLocaleString('pt-BR')}
+                      Última execução: {formatDate(new Date(automation.lastRun))}
                     </div>
                   )}
                 </CardContent>

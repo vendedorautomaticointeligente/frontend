@@ -14,6 +14,9 @@ import { toast } from "sonner"
 import { EmptyState } from "./EmptyState"
 import { LoadingState } from "./LoadingState"
 import { StatsCard } from "./StatsCard"
+import { LeadDetailPage } from "./LeadDetailPage"
+import { ProductsManager } from "./ProductsManager"
+import { formatCurrency } from "../utils/formatters"
 import { 
   Users, 
   Plus, 
@@ -34,7 +37,9 @@ import {
   LayoutGrid,
   List as ListIcon,
   Loader2,
-  UserPlus
+  UserPlus,
+  Eye,
+  TrendingUp
 } from "lucide-react"
 
 interface Lead {
@@ -52,13 +57,16 @@ interface Lead {
   source: string
   lastContact: string
   notes: string
-  createdAt: string
+  products?: any[]
+  created_at: string
 }
 
 export function CRMPage() {
   const { accessToken } = useAuth()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
+  const [showProductsManager, setShowProductsManager] = useState(false)
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
 
@@ -78,7 +86,7 @@ export function CRMPage() {
     return `https://wa.me/${withCountryCode}`
   }
   
-  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list')
   const [searchTerm, setSearchTerm] = useState("")
   const [showAddLeadDialog, setShowAddLeadDialog] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
@@ -306,6 +314,19 @@ export function CRMPage() {
     )
   }
 
+  // Se um lead foi selecionado, mostrar a página de detalhe
+  if (selectedLeadId) {
+    return (
+      <LeadDetailPage 
+        leadId={selectedLeadId} 
+        onBack={() => {
+          setSelectedLeadId(null)
+          loadLeads() // Recarregar leads quando voltar
+        }} 
+      />
+    )
+  }
+
   return (
     <div className="h-full overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -320,6 +341,14 @@ export function CRMPage() {
           </div>
           
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowProductsManager(true)}
+            >
+              <DollarSign className="w-4 h-4 mr-2" />
+              Produtos/Serviços
+            </Button>
+            
             <div className="flex items-center border rounded-lg overflow-hidden bg-white">
               <Button
                 variant={viewMode === 'kanban' ? 'default' : 'ghost'}
@@ -494,6 +523,29 @@ export function CRMPage() {
           </div>
         </div>
 
+        {/* Pipeline Box */}
+        {(() => {
+          const openLeads = filteredLeads.filter(l => !['won', 'lost'].includes(l.status))
+          const totalValue = openLeads.reduce((sum, lead) => sum + (lead.value || 0), 0)
+          
+          return (
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-gray-600 font-medium">Pipeline Aberto</p>
+                    <p className="text-4xl font-bold text-blue-600 mt-1">
+                      {formatCurrency(totalValue)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-2">{openLeads.length} oportunidade{openLeads.length !== 1 ? 's' : ''}</p>
+                  </div>
+                  <TrendingUp className="w-16 h-16 text-blue-400 opacity-20" />
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })()}
+
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           {statusOptions.map((status) => {
@@ -548,7 +600,16 @@ export function CRMPage() {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => openEditDialog(lead)}
+                                onClick={() => setSelectedLeadId(lead.id)}
+                                className="h-7 w-7 p-0 text-vai-blue-tech hover:text-vai-blue-tech"
+                                title="Ver detalhes"
+                              >
+                                <Eye className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setSelectedLeadId(lead.id)}
                                 className="h-7 w-7 p-0"
                               >
                                 <Edit className="w-3 h-3" />
@@ -588,7 +649,7 @@ export function CRMPage() {
                             {lead.value > 0 && (
                               <div className="flex items-center gap-2 text-green-600 font-medium">
                                 <DollarSign className="w-3 h-3" />
-                                <span>R$ {lead.value.toLocaleString('pt-BR')}</span>
+                                <span>{formatCurrency(lead.value)}</span>
                               </div>
                             )}
                           </div>
@@ -673,14 +734,23 @@ export function CRMPage() {
                               </Badge>
                             </td>
                             <td className="p-3 font-medium text-green-600">
-                              {lead.value > 0 ? `R$ ${lead.value.toLocaleString('pt-BR')}` : '-'}
+                              {lead.value > 0 ? formatCurrency(lead.value) : '-'}
                             </td>
                             <td className="p-3">
                               <div className="flex items-center justify-end gap-2">
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  onClick={() => openEditDialog(lead)}
+                                  onClick={() => setSelectedLeadId(lead.id)}
+                                  title="Ver detalhes"
+                                  className="text-vai-blue-tech hover:text-vai-blue-tech"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setSelectedLeadId(lead.id)}
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
@@ -812,6 +882,15 @@ export function CRMPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Products Manager */}
+        <ProductsManager 
+          isOpen={showProductsManager} 
+          onClose={() => setShowProductsManager(false)}
+          onProductAdded={() => {
+            // Opcional: recarregar algo quando produto é adicionado
+          }}
+        />
       </div>
     </div>
   )

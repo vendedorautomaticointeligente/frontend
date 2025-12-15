@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Textarea } from './ui/textarea'
 import { MessageSquare, Phone, Instagram, Facebook, QrCode, Check, X, Loader2, AlertCircle, Zap, Plug, RefreshCw, Settings, Smartphone } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatDate } from '../utils/formatters'
 import { QRCodeCanvas } from './ui/qrcode'
 
 interface Integration {
@@ -270,7 +271,7 @@ export function Integrations() {
                       : `API Oficial - Phone ID: ${whatsappIntegration.config.phoneId}`}
                   </p>
                   <p className="text-xs text-green-600 mt-1">
-                    Conectado em: {new Date(whatsappIntegration.connectedAt!).toLocaleString('pt-BR')}
+                    Conectado em: {formatDate(new Date(whatsappIntegration.connectedAt!))}
                   </p>
                 </div>
                 <Button 

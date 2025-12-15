@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Progress } from "./ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { useAuth } from "../hooks/useAuthLaravel"
+import { formatNumber } from "../utils/formatters"
 import { 
   Search, 
   Loader2, 
@@ -2174,7 +2175,7 @@ export function ListGeneratorB2C() {
                               {contact.followers !== undefined && (
                                 <Badge variant="secondary" className="gap-1">
                                   <Users className="w-3 h-3" />
-                                  {contact.followers.toLocaleString('pt-BR')}
+                                  {formatNumber(contact.followers)}
                                 </Badge>
                               )}
                               <Badge variant="outline" className="gap-1">
