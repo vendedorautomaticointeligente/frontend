@@ -58,7 +58,7 @@ export function Integrations() {
 
   const loadWhatsAppConnections = async () => {
     try {
-      const response = await fetch(`${baseUrl}/whatsapp/connections`, {
+      const response = await fetch(`${baseUrl}/evolution/instances`, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -66,7 +66,7 @@ export function Integrations() {
 
       if (response.ok) {
         const data = await response.json()
-        setWhatsappConnections(data.connections || [])
+        setWhatsappConnections(data.instances || data || [])
       }
     } catch (error) {
       console.error('Error loading WhatsApp connections:', error)
@@ -254,53 +254,69 @@ export function Integrations() {
                   </CardDescription>
                 </div>
               </div>
-              {whatsappIntegration && getStatusBadge(whatsappIntegration.status)}
+              {whatsappConnections.length > 0 && (
+                <Badge className="bg-green-500">
+                  <Check className="w-3 h-3 mr-1" />
+                  {whatsappConnections.length} conectado{whatsappConnections.length > 1 ? 's' : ''}
+                </Badge>
+              )}
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {whatsappIntegration?.status === 'connected' ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Check className="w-5 h-5 text-green-600" />
-                    <p className="font-medium text-green-900">WhatsApp Conectado</p>
+            {whatsappConnections.length > 0 ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-700">Números Conectados</p>
+                {whatsappConnections.map((connection: any, index: number) => (
+                  <div key={index} className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                        <Smartphone className="w-5 h-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-green-900">
+                          {connection.instance || connection.phone || 'Instância'}
+                        </p>
+                        <p className="text-xs text-green-600">
+                          {connection.state === 'open' ? '✓ Ativo' : '• Inativo'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {connection.state === 'open' && (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
+                          <Check className="w-3 h-3 mr-1" />
+                          Ativo
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-sm text-green-700">
-                    {whatsappIntegration.config.type === 'evolution' 
-                      ? `Evolution API - Instância: ${whatsappIntegration.config.instance}`
-                      : `API Oficial - Phone ID: ${whatsappIntegration.config.phoneId}`}
-                  </p>
-                  <p className="text-xs text-green-600 mt-1">
-                    Conectado em: {formatDate(new Date(whatsappIntegration.connectedAt!))}
-                  </p>
-                </div>
-                <Button 
-                  variant="destructive" 
-                  size="sm"
-                  onClick={() => disconnectIntegration(whatsappIntegration.id)}
-                >
-                  <X className="w-4 h-4 mr-2" />
-                  Desconectar
-                </Button>
-              </div>
-            ) : (
-              <Dialog open={showWhatsAppDialog} onOpenChange={(open) => {
-                setShowWhatsAppDialog(open)
-                if (!open) {
-                  // Limpa ao fechar
-                  setQrCode(null)
-                  setSessionId(null)
-                  setIsConnecting(false)
-                  setWhatsappName('')
-                  setWhatsappNumber('')
-                }
-              }}>
-                <DialogTrigger asChild>
-                  <Button className="w-full sm:w-auto">
-                    <Zap className="w-4 h-4 mr-2" />
-                    Conectar WhatsApp
-                  </Button>
-                </DialogTrigger>
+                ))}
+                <Dialog open={showWhatsAppDialog} onOpenChange={(open) => {
+                  setShowWhatsAppDialog(open)
+                  if (!open) {
+                    // Ao fechar o dialog, limpa todos os estados
+                    setQrCode(null)
+                    setSessionId(null)
+                    setIsConnecting(false)
+                    setWhatsappName('')
+                    setWhatsappNumber('')
+                    setQrLoading(false)
+                  } else {
+                    // Ao abrir o dialog, também garante que está limpo
+                    setQrCode(null)
+                    setSessionId(null)
+                    setIsConnecting(false)
+                    setWhatsappName('')
+                    setWhatsappNumber('')
+                    setQrLoading(false)
+                  }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full">
+                      <Zap className="w-4 h-4 mr-2" />
+                      Conectar Outro Número
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Conectar WhatsApp</DialogTitle>
@@ -391,7 +407,12 @@ export function Integrations() {
                                         toast.success('QR Code gerado! Escaneie com seu WhatsApp')
                                         
                                         // Continua polling para verificar se conectou
-                                        const checkConnection = setInterval(async () => {
+                                        let connectionAttempts = 0
+                                        const maxConnectionAttempts = 90
+                                        let checkConnection: NodeJS.Timeout | null = null
+                                        
+                                        checkConnection = setInterval(async () => {
+                                          connectionAttempts++
                                           try {
                                             const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
                                               headers: {
@@ -402,26 +423,27 @@ export function Integrations() {
                                             const statusResult = await statusResponse.json()
                                             
                                             if (statusResult.connected) {
-                                              clearInterval(checkConnection)
+                                              if (checkConnection) clearInterval(checkConnection)
                                               setIsConnecting(false)
                                               setShowWhatsAppDialog(false)
-                                              toast.success('WhatsApp conectado com sucesso!')
+                                              toast.success('✓ WhatsApp conectado com sucesso!')
                                               await loadIntegrations()
                                               await loadWhatsAppConnections()
                                               
-                                              // Limpa form
                                               setWhatsappName('')
                                               setWhatsappNumber('')
                                               setQrCode(null)
                                               setSessionId(null)
+                                              return
+                                            } else if (connectionAttempts >= maxConnectionAttempts) {
+                                              if (checkConnection) clearInterval(checkConnection)
+                                              setIsConnecting(false)
+                                              toast.error('Tempo limite de conexão excedido. Tente novamente.')
                                             }
                                           } catch (error) {
                                             console.error('Error checking connection:', error)
                                           }
                                         }, 2000)
-                                        
-                                        // Para de verificar após 3 minutos
-                                        setTimeout(() => clearInterval(checkConnection), 180000)
                                       } else if (attempts >= maxAttempts) {
                                         clearInterval(pollQr)
                                         setQrLoading(false)
@@ -441,6 +463,286 @@ export function Integrations() {
                                   toast.success('QR Code gerado! Escaneie com seu WhatsApp')
                                   
                                   // Polling para verificar se conectou
+                                  let connectionAttempts = 0
+                                  const maxConnectionAttempts = 90
+                                  let checkConnection: NodeJS.Timeout | null = null
+                                  
+                                  checkConnection = setInterval(async () => {
+                                    connectionAttempts++
+                                    try {
+                                      const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                        headers: {
+                                          'Authorization': `Bearer ${accessToken}`
+                                        }
+                                      })
+                                      
+                                      const statusResult = await statusResponse.json()
+                                      
+                                      if (statusResult.connected) {
+                                        if (checkConnection) clearInterval(checkConnection)
+                                        setIsConnecting(false)
+                                        setShowWhatsAppDialog(false)
+                                        toast.success('✓ WhatsApp conectado com sucesso!')
+                                        await loadIntegrations()
+                                        await loadWhatsAppConnections()
+                                        
+                                        setWhatsappName('')
+                                        setWhatsappNumber('')
+                                        setQrCode(null)
+                                        setSessionId(null)
+                                        return
+                                      } else if (connectionAttempts >= maxConnectionAttempts) {
+                                        if (checkConnection) clearInterval(checkConnection)
+                                        setIsConnecting(false)
+                                        toast.error('Tempo limite de conexão excedido. Tente novamente.')
+                                      }
+                                    } catch (error) {
+                                      console.error('Error checking connection:', error)
+                                    }
+                                  }, 2000)
+                                } else {
+                                  setQrLoading(false)
+                                  toast.error(result.error || 'Erro ao gerar QR Code')
+                                }
+                              } catch (error) {
+                                console.error('Error generating QR code:', error)
+                                toast.error('Erro ao gerar QR Code')
+                                setQrLoading(false)
+                              }
+                            }}
+                            disabled={!whatsappName || !whatsappNumber || qrLoading}
+                            className="flex-1"
+                          >
+                            {qrLoading ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                Gerando...
+                              </>
+                            ) : (
+                              <>
+                                <QrCode className="w-4 h-4 mr-2" />
+                                Gerar QR Code
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center gap-2 mb-2">
+                            <Smartphone className="w-5 h-5 text-green-600" />
+                            <p className="font-medium text-green-900">Como Conectar</p>
+                          </div>
+                          <p className="text-sm text-green-700">
+                            1. Abra o WhatsApp no celular<br />
+                            2. Toque em <strong>Mais opções</strong> (⋮) → <strong>Aparelhos conectados</strong><br />
+                            3. Toque em <strong>Conectar um aparelho</strong><br />
+                            4. Escaneie o QR Code abaixo
+                          </p>
+                        </div>
+
+                        <div className="p-6 border-2 border-green-500 rounded-lg bg-white">
+                          <div className="flex justify-center mb-4">
+                            <QRCodeCanvas 
+                              value={qrCode} 
+                              size={280} 
+                              level="H"
+                              includeMargin={true}
+                            />
+                          </div>
+                          {isConnecting && (
+                            <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Aguardando leitura do QR Code...
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => {
+                              setQrCode(null)
+                              setSessionId(null)
+                              setIsConnecting(false)
+                            }}
+                            variant="outline"
+                            className="flex-1"
+                          >
+                            <RefreshCw className="w-4 h-4 mr-2" />
+                            Gerar Novo QR Code
+                          </Button>
+                        </div>
+
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-xs text-blue-800">
+                            <strong>Nota:</strong> O QR Code expira em 60 segundos. Se expirar, clique em "Gerar Novo QR Code".
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+              </div>
+            ) : (
+              <Dialog open={showWhatsAppDialog} onOpenChange={(open) => {
+                setShowWhatsAppDialog(open)
+                if (!open) {
+                  // Ao fechar o dialog, limpa todos os estados
+                  setQrCode(null)
+                  setSessionId(null)
+                  setIsConnecting(false)
+                  setWhatsappName('')
+                  setWhatsappNumber('')
+                  setQrLoading(false)
+                } else {
+                  // Ao abrir o dialog, também garante que está limpo
+                  setQrCode(null)
+                  setSessionId(null)
+                  setIsConnecting(false)
+                  setWhatsappName('')
+                  setWhatsappNumber('')
+                  setQrLoading(false)
+                }
+              }}>
+                <DialogTrigger asChild>
+                  <Button className="w-full">
+                    <Zap className="w-4 h-4 mr-2" />
+                    Conectar WhatsApp
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle>Conectar WhatsApp</DialogTitle>
+                    <DialogDescription>
+                      Preencha os dados abaixo para conectar seu WhatsApp
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 mt-4">
+                    {!qrCode ? (
+                      <>
+                        <div className="space-y-4">
+                          <div className="space-y-2">
+                            <Label htmlFor="whatsapp-name">Nome da Conexão</Label>
+                            <Input
+                              id="whatsapp-name"
+                              placeholder="Ex: Atendimento Vendas"
+                              value={whatsappName}
+                              onChange={(e) => setWhatsappName(e.target.value)}
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <Label htmlFor="whatsapp-number">Número do WhatsApp</Label>
+                            <Input
+                              id="whatsapp-number"
+                              placeholder="55 11 999999999"
+                              value={whatsappNumber}
+                              onChange={(e) => setWhatsappNumber(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                              Digite apenas números, com código do país e área (sem hífens ou parênteses)
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={async () => {
+                              if (!whatsappName || !whatsappNumber) {
+                                toast.error('Preencha o nome e número da conexão')
+                                return
+                              }
+                              
+                              try {
+                                setQrLoading(true)
+                                
+                                const response = await fetch(`${baseUrl}/whatsapp/generate-qr`, {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${accessToken}`
+                                  },
+                                  body: JSON.stringify({
+                                    number: whatsappNumber
+                                  })
+                                })
+
+                                const result = await response.json()
+
+                                if (response.status === 202 && result.polling && result.sessionId) {
+                                  setSessionId(result.sessionId)
+                                  setIsConnecting(true)
+                                  toast.info('Gerando QR Code... aguarde')
+                                  
+                                  let attempts = 0
+                                  const maxAttempts = 40
+                                  
+                                  const pollQr = setInterval(async () => {
+                                    attempts++
+                                    try {
+                                      const pollResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                        headers: {
+                                          'Authorization': `Bearer ${accessToken}`
+                                        }
+                                      })
+                                      
+                                      const pollResult = await pollResponse.json()
+                                      
+                                      if (pollResult.qrCode) {
+                                        clearInterval(pollQr)
+                                        setQrCode(pollResult.qrCode)
+                                        setQrLoading(false)
+                                        toast.success('QR Code gerado! Escaneie com seu WhatsApp')
+                                        
+                                        const checkConnection = setInterval(async () => {
+                                          try {
+                                            const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
+                                              headers: {
+                                                'Authorization': `Bearer ${accessToken}`
+                                              }
+                                            })
+                                            
+                                            const statusResult = await statusResponse.json()
+                                            
+                                            if (statusResult.connected) {
+                                              clearInterval(checkConnection)
+                                              setIsConnecting(false)
+                                              setShowWhatsAppDialog(false)
+                                              toast.success('✓ WhatsApp conectado com sucesso!')
+                                              await loadIntegrations()
+                                              await loadWhatsAppConnections()
+                                              
+                                              setWhatsappName('')
+                                              setWhatsappNumber('')
+                                              setQrCode(null)
+                                              setSessionId(null)
+                                            }
+                                          } catch (error) {
+                                            console.error('Error checking connection:', error)
+                                          }
+                                        }, 2000)
+                                        
+                                        setTimeout(() => clearInterval(checkConnection), 180000)
+                                      } else if (attempts >= maxAttempts) {
+                                        clearInterval(pollQr)
+                                        setQrLoading(false)
+                                        toast.error('Timeout ao gerar QR Code. Tente novamente.')
+                                      }
+                                    } catch (error) {
+                                      console.error('Error polling QR code:', error)
+                                    }
+                                  }, 1500)
+                                  
+                                } else if (response.ok && result.qrCode) {
+                                  setQrCode(result.qrCode)
+                                  setSessionId(result.sessionId)
+                                  setIsConnecting(true)
+                                  setQrLoading(false)
+                                  toast.success('QR Code gerado! Escaneie com seu WhatsApp')
+                                  
                                   const checkConnection = setInterval(async () => {
                                     try {
                                       const statusResponse = await fetch(`${baseUrl}/whatsapp/poll-qr/${result.sessionId}`, {
@@ -455,11 +757,10 @@ export function Integrations() {
                                         clearInterval(checkConnection)
                                         setIsConnecting(false)
                                         setShowWhatsAppDialog(false)
-                                        toast.success('WhatsApp conectado com sucesso!')
+                                        toast.success('✓ WhatsApp conectado com sucesso!')
                                         await loadIntegrations()
                                         await loadWhatsAppConnections()
                                         
-                                        // Limpa form
                                         setWhatsappName('')
                                         setWhatsappNumber('')
                                         setQrCode(null)
@@ -470,7 +771,6 @@ export function Integrations() {
                                     }
                                   }, 2000)
                                   
-                                  // Para de verificar após 3 minutos
                                   setTimeout(() => clearInterval(checkConnection), 180000)
                                 } else {
                                   setQrLoading(false)
