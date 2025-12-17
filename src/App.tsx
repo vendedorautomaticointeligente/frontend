@@ -53,15 +53,8 @@ function MainApp() {
     {
       key: 'listsB2B' as ActiveSection,
       icon: Building2,
-      label: 'Listas B2B',
+      label: 'Geração de Listas',
       description: 'Empresas e CNPJs'
-    },
-    {
-      key: 'listsB2C' as ActiveSection,
-      icon: UserCircle,
-      label: 'Listas B2C',
-      description: 'Instagram e LinkedIn',
-      comingSoon: true
     },
     {
       key: 'crm' as ActiveSection,

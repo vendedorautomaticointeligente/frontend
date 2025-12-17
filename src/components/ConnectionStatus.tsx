@@ -26,7 +26,7 @@ export function ConnectionStatus({ accessToken }: ConnectionStatusProps) {
     try {
       setStatus(prev => ({ ...prev, state: 'loading', message: 'Verificando...' }))
       
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
       const pingUrl = `${baseUrl}/ping`
       console.log('🔄 Testing connection to:', pingUrl)
 

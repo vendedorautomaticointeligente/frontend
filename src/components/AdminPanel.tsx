@@ -71,7 +71,7 @@ export function AdminPanel() {
   })
   const [users, setUsers] = useState<User[]>([])
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const url = `${baseUrl}${endpoint}`

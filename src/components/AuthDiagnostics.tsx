@@ -15,7 +15,7 @@ import {
 } from "lucide-react"
 
 export function AuthDiagnostics() {
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
   
   const [status, setStatus] = useState<{
     checking: boolean

@@ -26,7 +26,7 @@ interface Integration {
 
 export function Integrations() {
   const { accessToken } = useAuth()
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
   const [integrations, setIntegrations] = useState<Integration[]>([])
   const [whatsappConnections, setWhatsappConnections] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -66,6 +66,7 @@ export function Integrations() {
 
       if (response.ok) {
         const data = await response.json()
+        console.log('📱 Conexões carregadas:', data.connections || data || [])
         setWhatsappConnections(data.connections || data || [])
       }
     } catch (error) {
@@ -267,29 +268,41 @@ export function Integrations() {
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-slate-700">Números Conectados</p>
                 {whatsappConnections.map((connection: any, index: number) => (
-                  <div key={connection.id || index} className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-3 flex-1">
+                  <div key={connection.id || index} className="p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300 rounded-lg flex items-center justify-between hover:shadow-md transition-shadow">
+                    <div className="flex items-center gap-4 flex-1">
                       {connection.profilePicUrl ? (
                         <img 
                           src={connection.profilePicUrl} 
                           alt={connection.connectionName}
-                          className="w-10 h-10 rounded-full object-cover"
+                          className="w-12 h-12 rounded-full object-cover border-2 border-green-300"
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                          <Smartphone className="w-5 h-5 text-green-600" />
+                        <div className="w-12 h-12 bg-green-200 rounded-full flex items-center justify-center border-2 border-green-300">
+                          <Smartphone className="w-6 h-6 text-green-700" />
                         </div>
                       )}
                       <div className="flex-1">
-                        <p className="font-medium text-green-900">
-                          {connection.connectionName || 'Sem nome'}
-                        </p>
-                        <p className="text-sm text-green-700 font-mono">
-                          {connection.phoneNumber ? `+${connection.phoneNumber}` : 'Número não disponível'}
-                        </p>
-                        <p className="text-xs text-green-600 mt-1">
-                          {connection.connectionStatus === 'open' ? '✓ Ativo' : '• Inativo'}
-                        </p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-lg text-green-900">
+                            {connection.connectionName || 'Sem nome'}
+                          </p>
+                          {connection.connectionStatus === 'open' && (
+                            <Badge className="bg-green-500 text-white text-xs">
+                              <Check className="w-2.5 h-2.5 mr-1" />
+                              Ativo
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-1 space-y-0.5">
+                          <p className="text-sm text-green-700 font-mono font-semibold">
+                            📱 {connection.phoneNumber ? `+${connection.phoneNumber}` : 'Número não disponível'}
+                          </p>
+                          {connection.instanceName && (
+                            <p className="text-xs text-green-600">
+                              ID: {connection.instanceName}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -330,7 +343,7 @@ export function Integrations() {
                       </Button>
                     </div>
                   </div>
-                ))}
+                                ))}
                 <Dialog open={showWhatsAppDialog} onOpenChange={(open) => {
                   setShowWhatsAppDialog(open)
                   if (!open) {
@@ -370,13 +383,19 @@ export function Integrations() {
                       <>
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="whatsapp-name">Nome da Conexão</Label>
+                            <Label htmlFor="whatsapp-name" className="font-semibold">
+                              📛 Nome da Conexão <span className="text-red-500">*</span>
+                            </Label>
                             <Input
                               id="whatsapp-name"
-                              placeholder="Ex: Atendimento Vendas"
+                              placeholder="Ex: Murilo Comercial, Atendimento..."
                               value={whatsappName}
                               onChange={(e) => setWhatsappName(e.target.value)}
+                              className="font-medium"
                             />
+                            <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                              💡 Este é o nome que aparecerá para você nas conversas e integrações!
+                            </p>
                           </div>
 
                           <div className="space-y-2">
@@ -404,9 +423,18 @@ export function Integrations() {
                               try {
                                 setQrLoading(true)
                                 
+                                console.log('🔴 ANTES DE ENVIAR - whatsappName:', whatsappName)
+                                console.log('🔴 ANTES DE ENVIAR - whatsappNumber:', whatsappNumber)
+                                
                                 // Salvar nome da conexão em variável local para depois salvar no backend
                                 const connectionName = whatsappName
                                 const connectionNumber = whatsappNumber
+                                
+                                console.log('📱 Enviando para backend:', {
+                                  name: whatsappName,
+                                  number: whatsappNumber,
+                                  connectionName: connectionName
+                                })
                                 
                                 // Chama o backend para criar instância e gerar QR Code
                                 const response = await fetch(`${baseUrl}/whatsapp/generate-qr`, {
@@ -500,10 +528,60 @@ export function Integrations() {
                                                             // Fully confirmed! Close modal
                                                             if (checkConnection) clearInterval(checkConnection)
                                                             setIsConnecting(false)
+                                                            
+                                                            // 🔄 PASSO 4: Recarregar do banco para garantir que o nome foi salvo
+                                                            try {
+                                                              await loadWhatsAppConnections()
+                                                              
+                                                              // Encontrar a conexão que acabou de ser criada
+                                                              const response = await fetch(`${baseUrl}/whatsapp/connections`, {
+                                                                headers: {
+                                                                  'Authorization': `Bearer ${accessToken}`
+                                                                }
+                                                              })
+                                                              
+                                                              if (response.ok) {
+                                                                const data = await response.json()
+                                                                const newConnection = (data.connections || [])[0]
+                                                                
+                                                                if (newConnection && newConnection.connectionName) {
+                                                                  // ✅ PASSO 4: Toast com nome confirmado do banco
+                                                                  toast.success(`✅ ${newConnection.connectionName} conectado com sucesso!`, {
+                                                                    description: `📱 ${newConnection.phoneNumber ? '+' + newConnection.phoneNumber : 'Número: ' + whatsappNumber}`
+                                                                  })
+                                                                } else {
+                                                                  toast.success('✅ WhatsApp conectado com sucesso!')
+                                                                }
+                                                              }
+                                                            } catch (error) {
+                                                              console.error('Erro ao recarregar conexões:', error)
+                                                              toast.success('✅ WhatsApp conectado com sucesso!')
+                                                            }
+                                                            
                                                             setShowWhatsAppDialog(false)
-                                                            toast.success('✓ WhatsApp conectado com sucesso!')
                                                             await loadIntegrations()
-                                                            await loadWhatsAppConnections()
+                                                            
+                                                            // 🔄 Sincronizar conversas da nova instância
+                                                            try {
+                                                              const instanceName = sessionId
+                                                              if (instanceName) {
+                                                                console.log('🔄 Sincronizando conversas da nova instância...')
+                                                                const syncResponse = await fetch(`${baseUrl}/conversations/sync/${instanceName}`, {
+                                                                  method: 'POST',
+                                                                  headers: {
+                                                                    'Authorization': `Bearer ${accessToken}`
+                                                                  }
+                                                                })
+                                                                
+                                                                const syncData = await syncResponse.json()
+                                                                if (syncResponse.ok) {
+                                                                  console.log('✅ Conversas sincronizadas:', syncData.data.synced)
+                                                                  toast.success(`✅ ${syncData.data.synced} conversas sincronizadas`)
+                                                                }
+                                                              }
+                                                            } catch (error) {
+                                                              console.error('Erro ao sincronizar conversas:', error)
+                                                            }
                                                             
                                                             setWhatsappName('')
                                                             setWhatsappNumber('')
@@ -596,8 +674,37 @@ export function Integrations() {
                                                       // Fully confirmed! Close modal
                                                       if (checkConnection) clearInterval(checkConnection)
                                                       setIsConnecting(false)
+                                                      
+                                                      // 🔄 PASSO 4: Recarregar do banco para garantir que o nome foi salvo
+                                                      try {
+                                                        await loadWhatsAppConnections()
+                                                        
+                                                        // Encontrar a conexão que acabou de ser criada
+                                                        const response = await fetch(`${baseUrl}/whatsapp/connections`, {
+                                                          headers: {
+                                                            'Authorization': `Bearer ${accessToken}`
+                                                          }
+                                                        })
+                                                        
+                                                        if (response.ok) {
+                                                          const data = await response.json()
+                                                          const newConnection = (data.connections || [])[0]
+                                                          
+                                                          if (newConnection && newConnection.connectionName) {
+                                                            // ✅ PASSO 4: Toast com nome confirmado do banco
+                                                            toast.success(`✅ ${newConnection.connectionName} conectado com sucesso!`, {
+                                                              description: `📱 ${newConnection.phoneNumber ? '+' + newConnection.phoneNumber : 'Número: ' + whatsappNumber}`
+                                                            })
+                                                          } else {
+                                                            toast.success('✅ WhatsApp conectado com sucesso!')
+                                                          }
+                                                        }
+                                                      } catch (error) {
+                                                        console.error('Erro ao recarregar conexões:', error)
+                                                        toast.success('✅ WhatsApp conectado com sucesso!')
+                                                      }
+                                                      
                                                       setShowWhatsAppDialog(false)
-                                                      toast.success('✓ WhatsApp conectado com sucesso!')
                                                       await loadIntegrations()
                                                       await loadWhatsAppConnections()
                                                       
@@ -750,13 +857,19 @@ export function Integrations() {
                       <>
                         <div className="space-y-4">
                           <div className="space-y-2">
-                            <Label htmlFor="whatsapp-name">Nome da Conexão</Label>
+                            <Label htmlFor="whatsapp-name" className="font-semibold">
+                              📛 Nome da Conexão <span className="text-red-500">*</span>
+                            </Label>
                             <Input
                               id="whatsapp-name"
-                              placeholder="Ex: Atendimento Vendas"
+                              placeholder="Ex: Murilo Comercial, Atendimento..."
                               value={whatsappName}
                               onChange={(e) => setWhatsappName(e.target.value)}
+                              className="font-medium"
                             />
+                            <p className="text-xs text-blue-600 bg-blue-50 p-2 rounded">
+                              💡 Este é o nome que aparecerá para você nas conversas e integrações!
+                            </p>
                           </div>
 
                           <div className="space-y-2">
@@ -784,6 +897,9 @@ export function Integrations() {
                               try {
                                 setQrLoading(true)
                                 
+                                console.log('🔴 SEGUNDO MODAL - whatsappName:', whatsappName)
+                                console.log('🔴 SEGUNDO MODAL - whatsappNumber:', whatsappNumber)
+                                
                                 const response = await fetch(`${baseUrl}/whatsapp/generate-qr`, {
                                   method: 'POST',
                                   headers: {
@@ -791,7 +907,8 @@ export function Integrations() {
                                     'Authorization': `Bearer ${accessToken}`
                                   },
                                   body: JSON.stringify({
-                                    number: whatsappNumber
+                                    number: whatsappNumber,
+                                    name: whatsappName
                                   })
                                 })
 

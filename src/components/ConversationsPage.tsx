@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { Search, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Check, CheckCheck, Clock, X, MessageCircle, Loader2, Send, Filter, Settings, Users, Zap } from "lucide-react"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
@@ -69,7 +69,10 @@ const channelConfig = {
 
 export function ConversationsPage() {
   const { accessToken } = useAuth()
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  
+  // 🔥 REF PARA AUTO-SCROLL DAS MENSAGENS
+  const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,6 +87,183 @@ export function ConversationsPage() {
   const [isRecording, setIsRecording] = useState(false)
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false)
+  const [sseConnected, setSseConnected] = useState(false)
+  const [selectedInstance, setSelectedInstance] = useState<string | null>(null)
+  const [instanceNamesMap, setInstanceNamesMap] = useState<Record<string, string>>({})
+
+
+  // 🔥 AUTO-SCROLL PARA A ÚLTIMA MENSAGEM QUANDO NOVA CHEGAR
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  // 🔥 SSE LISTENER - Receber mensagens em tempo real quando webhook dispara
+  useEffect(() => {
+    if (!accessToken) return
+
+    let eventSource: EventSource | null = null
+    let reconnectTimeout: NodeJS.Timeout | null = null
+
+    const connectSSE = () => {
+      try {
+        // Usar URL com token como query parameter (EventSource não suporta headers)
+        const sseUrl = `${baseUrl}/sse/stream`
+        console.log('📡 Conectando ao SSE:', sseUrl)
+        
+        // Criar EventSource com configuração apropriada
+        eventSource = new EventSource(sseUrl, {
+          withCredentials: true // Permite enviar cookies e headers de autenticação
+        })
+
+        // Listener para evento de conexão
+        eventSource.addEventListener('connected', (event) => {
+          console.log('✅ Conectado ao stream SSE')
+          setSseConnected(true)
+        })
+
+        // Listener para mensagens recebidas
+        eventSource.addEventListener('message_received', (event) => {
+          try {
+            const data = JSON.parse(event.data)
+            console.log('📨 Mensagem recebida via SSE:', data)
+
+            // Verificar se é da conversa atualmente aberta
+            if (selectedConversation && data.conversation_id === selectedConversation.id) {
+              // Adicionar mensagem ao estado IMEDIATAMENTE
+              const newMessage: Message = {
+                id: data.message.id,
+                text: data.message.text,
+                timestamp: new Date(data.message.created_at).toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                }),
+                isSent: data.message.direction === 'sent',
+                status: data.message.direction === 'sent' ? 'read' : undefined,
+                media_data: data.message.media_data,
+                message_type: data.message.message_type
+              }
+
+              setMessages(prev => {
+                // Evitar duplicatas
+                if (prev.find(m => m.id === newMessage.id)) {
+                  return prev
+                }
+                console.log('➕ Adicionando nova mensagem ao estado')
+                return [...prev, newMessage]
+              })
+
+              // Atualizar última mensagem da conversa na lista
+              setConversations(prev =>
+                prev.map(conv =>
+                  conv.id === selectedConversation.id
+                    ? {
+                        ...conv,
+                        lastMessage: data.message.text || '(sem texto)',
+                        lastMessageTime: data.conversation.last_message_at,
+                        unread: data.message.direction === 'sent' ? conv.unread : conv.unread + 1
+                      }
+                    : conv
+                )
+              )
+            } else if (data.conversation_id) {
+              // Se não é a conversa aberta, apenas atualizar na lista
+              setConversations(prev =>
+                prev.map(conv =>
+                  conv.id === data.conversation_id
+                    ? {
+                        ...conv,
+                        lastMessage: data.conversation.last_message,
+                        lastMessageTime: data.conversation.last_message_at,
+                        unread: data.message.direction === 'received' ? conv.unread + 1 : conv.unread
+                      }
+                    : conv
+                )
+              )
+            }
+          } catch (error) {
+            console.error('❌ Erro ao processar mensagem SSE:', error)
+          }
+        })
+
+        // Listener para heartbeat
+        eventSource.addEventListener('heartbeat', (event) => {
+          console.log('💓 Heartbeat recebido')
+        })
+
+        // Listener para erro
+        eventSource.onerror = (error) => {
+          console.error('❌ Erro na conexão SSE:', error)
+          setSseConnected(false)
+
+          // Fechar conexão em erro
+          if (eventSource) {
+            eventSource.close()
+            eventSource = null
+          }
+
+          // Reconectar em 5 segundos
+          reconnectTimeout = setTimeout(() => {
+            console.log('🔄 Tentando reconectar SSE...')
+            connectSSE()
+          }, 5000)
+        }
+      } catch (error) {
+        console.error('❌ Erro ao conectar SSE:', error)
+      }
+    }
+
+    connectSSE()
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout)
+      }
+    }
+  }, [accessToken, baseUrl, selectedConversation])
+
+  // 🔥 CARREGAR INSTÂNCIAS COM NOMES CONFIGURADOS PELO USUÁRIO
+  useEffect(() => {
+    const fetchInstancesWithNames = async () => {
+      try {
+        if (!accessToken) return
+
+        console.log('📱 Carregando instâncias com nomes...')
+        const response = await fetch(`${baseUrl}/whatsapp/instances-with-names`, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        })
+
+        if (!response.ok) {
+          console.log('❌ Erro ao carregar instâncias:', response.status)
+          return
+        }
+
+        const data = await response.json()
+
+        if (data.success && data.instances) {
+          // Criar mapa de instanceName -> connectionName
+          const namesMap: Record<string, string> = {}
+          data.instances.forEach((instance: any) => {
+            namesMap[instance.instanceName] = instance.connectionName || instance.profileName || instance.phoneNumber
+          })
+
+          console.log('✅ Instâncias carregadas:', Object.keys(namesMap).length)
+          console.log('📋 Mapa de nomes:', namesMap)
+          setInstanceNamesMap(namesMap)
+        }
+      } catch (error) {
+        console.error('❌ Erro ao carregar instâncias com nomes:', error)
+      }
+    }
+
+    if (accessToken) {
+      fetchInstancesWithNames()
+    }
+  }, [accessToken, baseUrl])
 
   // 🔥 CARREGAR CONVERSAS REAIS DA API
   useEffect(() => {
@@ -176,7 +356,7 @@ export function ConversationsPage() {
     }
   }, [accessToken, baseUrl])
 
-  // Carregar mensagens da conversa selecionada
+  // Carregar mensagens da conversa selecionada + SSE para tempo real
   useEffect(() => {
     const fetchMessages = async (showLoading = true) => {
       if (!selectedConversation || !accessToken) return
@@ -202,12 +382,8 @@ export function ConversationsPage() {
             media_data: msg.media_data,
             message_type: msg.message_type
           }))
-          // Menos logs no polling
           if (showLoading) {
-            // Log apenas na primeira carga para evitar spam
-            if (showLoading) {
-              console.log('✅ Mensagens processadas:', formattedMessages.length)
-            }
+            console.log('✅ Mensagens processadas:', formattedMessages.length)
           }
           setMessages(formattedMessages)
         }
@@ -218,21 +394,61 @@ export function ConversationsPage() {
       }
     }
 
+    // Carregar mensagens iniciais
     fetchMessages()
-    
-    // Polling para mensagens a cada 10 segundos
-    const interval = setInterval(() => {
-      if (selectedConversation) {
-        fetchMessages(false) // false = não mostrar loading
-      }
-    }, 10000)
-    
-    return () => clearInterval(interval)
+
+    // Conectar ao SSE para receber mensagens em tempo real
+    const connectSSE = () => {
+      const sseUrl = `${baseUrl}/sse/stream`
+      console.log('🔌 Conectando ao SSE:', sseUrl)
+      
+      const eventSource = new EventSource(sseUrl, { withCredentials: true })
+      
+      eventSource.addEventListener('open', () => {
+        console.log('✅ Conectado ao stream SSE')
+      })
+
+      eventSource.addEventListener('message_received', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('💬 Novo evento SSE recebido:', data)
+          
+          // Recarregar mensagens se for da conversa atual
+          if (selectedConversation && data.conversation_id === selectedConversation.id) {
+            console.log('🔄 Atualizando mensagens em tempo real...')
+            fetchMessages(false)
+          }
+        } catch (error) {
+          console.error('Erro ao processar evento SSE:', error)
+        }
+      })
+
+      eventSource.addEventListener('error', (error) => {
+        console.error('❌ Erro no SSE:', error)
+        eventSource.close()
+        // Reconectar após 5 segundos
+        setTimeout(connectSSE, 5000)
+      })
+
+      return eventSource
+    }
+
+    const eventSource = connectSSE()
+
+    return () => {
+      eventSource.close()
+      console.log('🔌 SSE desconectado')
+    }
   }, [selectedConversation, baseUrl, accessToken])
 
   // Filter conversations
   const filteredConversations = conversations.filter(conv => {
-    // Se não há pesquisa, mostrar todas
+    // Filtrar por instância selecionada (se houver)
+    if (selectedInstance && conv.whatsappInstanceName !== selectedInstance) {
+      return false
+    }
+    
+    // Se não há pesquisa, mostrar todas da instância
     if (!searchQuery.trim()) return true
     
     const matchesSearch = conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -241,13 +457,21 @@ export function ConversationsPage() {
     
     return matchesSearch
   })
+
+  // Obter lista única de instâncias conectadas
+  const connectedInstances = Array.from(new Set(
+    conversations
+      .map(c => c.whatsappInstanceName)
+      .filter((instance): instance is string => !!instance)
+  )).sort()
   
   // Log apenas quando há mudança significativa
   if (conversations.length !== filteredConversations.length) {
     console.log('🔍 Filtro aplicado:', {
       total: conversations.length,
       filtered: filteredConversations.length,
-      searchQuery
+      searchQuery,
+      selectedInstance
     })
   }
 
@@ -427,17 +651,17 @@ export function ConversationsPage() {
             )
           default:
             // Fallback para tipos não reconhecidos
-            return <p className="text-sm leading-relaxed">{message.text}</p>
+            return <p className="text-sm leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message.text}</p>
         }
       } catch (e) {
         console.error('Erro ao parsear media_data:', e)
         // Fallback em caso de erro
-        return <p className="text-sm leading-relaxed">{message.text}</p>
+        return <p className="text-sm leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message.text}</p>
       }
     }
 
     // Mensagem de texto normal
-    return <p className="text-sm leading-relaxed">{message.text}</p>
+    return <p className="text-sm leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>{message.text}</p>
   }
 
   // Função para enviar arquivo
@@ -503,7 +727,7 @@ export function ConversationsPage() {
       const data = await response.json()
       
       if (data.status === 'success') {
-        // Adicionar mensagem localmente sem recarregar
+        // Adicionar mensagem localmente SEM recarregar
         const newMessage: Message = {
           id: data.data.id,
           text: messageInput,
@@ -515,6 +739,7 @@ export function ConversationsPage() {
           status: 'sent'
         }
         
+        // Apenas adicionar, não recarregar tudo (elimina flicker)
         setMessages(prev => [...prev, newMessage])
         setMessageInput('')        
         toast.success('Mensagem enviada com sucesso!', {
@@ -524,54 +749,6 @@ export function ConversationsPage() {
             border: '1px solid #e0e7ff'
           }
         })
-        
-        // Forçar atualização das conversas e mensagens
-        setTimeout(() => {
-          if (selectedConversation) {
-            fetch(`${baseUrl}/conversations/${selectedConversation.id}/messages`, {
-              headers: { 'Authorization': `Bearer ${accessToken}` }
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.status === 'success' && data.data) {
-                const formattedMessages = data.data.map((msg: any) => ({
-                  id: msg.id,
-                  text: msg.text,
-                  timestamp: new Date(msg.created_at).toLocaleTimeString('pt-BR', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  }),
-                  isSent: msg.direction === 'sent',
-                  status: msg.direction === 'sent' ? 'read' : undefined
-                }))
-                setMessages(formattedMessages)
-              }
-            })
-          }
-        }, 1000)
-        setTimeout(() => {
-          if (selectedConversation) {
-            fetch(`${baseUrl}/conversations/${selectedConversation.id}/messages`, {
-              headers: { 'Authorization': `Bearer ${accessToken}` }
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.status === 'success' && data.data) {
-                const formattedMessages = data.data.map((msg: any) => ({
-                  id: msg.id,
-                  text: msg.text,
-                  timestamp: new Date(msg.created_at).toLocaleTimeString('pt-BR', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  }),
-                  isSent: msg.direction === 'sent',
-                  status: msg.direction === 'sent' ? 'read' : undefined
-                }))
-                setMessages(formattedMessages)
-              }
-            })
-          }
-        }, 1000)
       } else {
         toast.error(`❌ ${data.message || 'Erro ao enviar mensagem'}`)
       }
@@ -582,9 +759,9 @@ export function ConversationsPage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40 overflow-hidden">
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
       {/* Enhanced Header */}
-      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-3 shadow-sm flex-shrink-0">
+      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-3 shadow-sm flex-shrink-0 z-20">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
@@ -616,10 +793,10 @@ export function ConversationsPage() {
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Enhanced Conversations List */}
-        <div className="w-80 xl:w-96 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg min-h-0">
+        {/* Enhanced Conversations List - LARGURA FIXA */}
+        <div className="w-80 xl:w-96 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg overflow-hidden flex-shrink-0" style={{ maxWidth: '380px', minWidth: '320px' }}>
           {/* Enhanced Search */}
-          <div className="p-5 border-b border-gray-200/60 space-y-4 bg-gradient-to-r from-white/90 to-blue-50/50">
+          <div className="p-5 border-b border-gray-200/60 space-y-4 bg-gradient-to-r from-white/90 to-blue-50/50 flex-shrink-0">
             <div className="relative group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
               <Input
@@ -630,11 +807,43 @@ export function ConversationsPage() {
               />
             </div>
 
-
+            {/* Instance Filter - Mostrar apenas se houver múltiplas instâncias */}
+            {connectedInstances.length > 1 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setSelectedInstance(null)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                    selectedInstance === null
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  📱 Todos ({conversations.length})
+                </button>
+                {connectedInstances.map((instance) => {
+                  const count = conversations.filter(c => c.whatsappInstanceName === instance).length
+                  const displayName = instanceNamesMap[instance] || instance.slice(-6)
+                  return (
+                    <button
+                      key={instance}
+                      onClick={() => setSelectedInstance(instance)}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                        selectedInstance === instance
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title={`Instância: ${instance}`}
+                    >
+                      {displayName} ({count})
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
 
           {/* Enhanced Conversations List */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 w-full" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
             {loading ? (
               <div className="flex flex-col items-center justify-center h-full p-8">
                 <div className="relative">
@@ -668,6 +877,7 @@ export function ConversationsPage() {
                       ? 'bg-gradient-to-r from-blue-500/10 via-indigo-500/8 to-blue-500/5 border-l-4 border-l-blue-500' 
                       : 'hover:bg-white/70 hover:shadow-sm'
                   }`}
+                  style={{ maxWidth: '100%' }}
                 >
                 {/* Enhanced Avatar with channel indicator */}
                 <div className="relative flex-shrink-0">
@@ -732,11 +942,19 @@ export function ConversationsPage() {
                       )}
                     </div>
                   </div>
-                  <p className={`text-sm truncate mt-1 ${
+                  <p className={`text-sm mt-1 ${
                     selectedConversation?.id === conversation.id 
                       ? 'text-blue-700 font-medium' 
                       : 'text-slate-600 group-hover:text-slate-700'
-                  }`}>
+                  }`} style={{ 
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: 'vertical',
+                    wordBreak: 'break-all',
+                    maxWidth: '100%',
+                    width: '100%'
+                  }}>
                     {conversation.lastMessage}
                   </p>
                   
@@ -752,9 +970,9 @@ export function ConversationsPage() {
 
         {/* Enhanced Chat Area */}
         {selectedConversation ? (
-          <div className="flex-1 flex flex-col bg-gray-50 relative overflow-hidden">
-            {/* Enhanced Chat Header */}
-            <div className="bg-white border-b border-gray-200 px-4 py-1.5 flex items-center justify-between shadow-sm flex-shrink-0">
+          <div className="flex-1 flex flex-col bg-gray-50 relative min-h-0">
+            {/* Enhanced Chat Header - FIXO */}
+            <div className="bg-white border-b border-gray-200 px-4 py-1.5 flex items-center justify-between shadow-sm flex-shrink-0 z-10">
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <Avatar className="w-10 h-10">
@@ -816,8 +1034,8 @@ export function ConversationsPage() {
               </div>
             </div>
 
-            {/* Messages Area - Scrollable */}
-            <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+            {/* Messages Area - Scrollable com altura fixa */}
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-3 min-h-0">
               {loadingMessages ? (
                 <div className="flex items-center justify-center h-32">
                   <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
@@ -842,6 +1060,11 @@ export function ConversationsPage() {
                           ? 'bg-green-500 text-white rounded-2xl rounded-br-sm'
                           : 'bg-white text-gray-800 border border-gray-200 rounded-2xl rounded-bl-sm'
                       }`}
+                      style={{
+                        overflowWrap: 'break-word',
+                        wordBreak: 'break-word',
+                        overflow: 'hidden'
+                      }}
                     >
                       {/* Pontinha do balão */}
                       <div className={`absolute bottom-0 w-0 h-0 ${
@@ -869,6 +1092,8 @@ export function ConversationsPage() {
                   </div>
                 ))
               )}
+              {/* Ref para auto-scroll - sempre no final da lista */}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Message Input - Fixed at bottom */}

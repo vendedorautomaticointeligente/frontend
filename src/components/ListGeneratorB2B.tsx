@@ -190,7 +190,7 @@ export function ListGeneratorB2B() {
 
   // Save contacts state - REMOVED: contacts now auto-saved by backend on generation
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const url = `${baseUrl}${endpoint}`

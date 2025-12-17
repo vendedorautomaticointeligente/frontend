@@ -111,7 +111,7 @@ export function LeadDetailPage({ leadId, onBack }: LeadDetailPageProps) {
   const [newNote, setNewNote] = useState('')
   const [savingProduct, setSavingProduct] = useState(false)
 
-  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api'
 
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,

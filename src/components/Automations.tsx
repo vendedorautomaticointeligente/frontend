@@ -104,7 +104,7 @@ export function Automations() {
     { value: 'messenger', label: 'Messenger', icon: Facebook }
   ]
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
   
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,

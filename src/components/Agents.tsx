@@ -87,8 +87,10 @@ export function Agents() {
   const [creatingNewAgent, setCreatingNewAgent] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
+  const [instances, setInstances] = useState<any[]>([])
+  const [selectedInstance, setSelectedInstance] = useState<string>("")
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,
@@ -133,7 +135,22 @@ export function Agents() {
 
   useEffect(() => {
     loadAgents()
+    loadInstances()
   }, [])
+
+  const loadInstances = async () => {
+    try {
+      const response = await fetch(`${baseUrl}/whatsapp/connections`, {
+        headers: getHeaders()
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setInstances(data.connections || [])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar instâncias:', error)
+    }
+  }
 
   const loadAgents = async () => {
     try {
@@ -538,6 +555,24 @@ export function Agents() {
                 </button>
                 {expandedSections.nome_agente && (
                   <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="selected_instance">Instância WhatsApp *</Label>
+                      <select
+                        id="selected_instance"
+                        value={selectedInstance}
+                        onChange={(e) => setSelectedInstance(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione uma instância...</option>
+                        {instances.map((inst) => (
+                          <option key={inst.id} value={inst.instance_name}>
+                            📱 {inst.phone_number || inst.instance_name} ({inst.instance_name})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500">Escolha qual instância WhatsApp este agente atenderá</p>
+                    </div>
+                    <Separator />
                     <div className="space-y-2">
                       <Label htmlFor="nome_agente_pnh">Identificador do Agente PNH *</Label>
                       <Input
@@ -1153,6 +1188,24 @@ export function Agents() {
                 </button>
                 {expandedSections.nome_agente && (
                   <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-selected_instance">Instância WhatsApp *</Label>
+                      <select
+                        id="edit-selected_instance"
+                        value={selectedInstance}
+                        onChange={(e) => setSelectedInstance(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione uma instância...</option>
+                        {instances.map((inst) => (
+                          <option key={inst.id} value={inst.instance_name}>
+                            📱 {inst.phone_number || inst.instance_name} ({inst.instance_name})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-slate-500">Escolha qual instância WhatsApp este agente atenderá</p>
+                    </div>
+                    <Separator />
                     <div className="space-y-2">
                       <Label htmlFor="edit-nome_agente_pnh">Identificador do Agente PNH *</Label>
                       <Input

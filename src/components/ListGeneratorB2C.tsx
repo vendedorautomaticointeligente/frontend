@@ -158,7 +158,7 @@ export function ListGeneratorB2C() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8002/api'
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
   // Timer effect for elapsed time display
   useEffect(() => {
