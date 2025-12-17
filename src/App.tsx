@@ -26,7 +26,7 @@ function MainApp() {
   const [activeSection, setActiveSection] = useState<ActiveSection>(() => {
     // Restaurar seção salva no localStorage ao inicializar
     const savedSection = localStorage.getItem('vai_active_section') as ActiveSection | null
-    return savedSection || 'listsB2B'
+    return savedSection || 'crm'
   })
 
   // Salvar seção no localStorage sempre que mudar

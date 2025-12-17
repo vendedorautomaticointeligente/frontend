@@ -125,24 +125,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Salvar token
-      if (data.token) {
-        saveToken(data.token)
-        
-        const userData: User = {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          company: data.user.company || '',
-          role: 'user',
-          plan: 'free'
-        }
-        
-        setUser(userData)
-        setAccessToken(data.token)
+      // ✅ Cadastro realizado com sucesso
+      // ⚠️ NÃO retorna token mais - usuário deve fazer login após cadastro
+      // Backend agora retorna apenas confirmação de criação
+      
+      return { 
+        success: true,
+        message: 'Usuário criado com sucesso! Por favor, faça login.',
+        email: data.email || email,
+        redirect_to: '/login'
       }
-
-      return { success: true }
     } catch (error) {
       return { success: false, error: 'Erro de conexão com o servidor' }
     } finally {

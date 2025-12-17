@@ -59,6 +59,23 @@ export function AuthForm() {
     const result = await signUp(formData.email, formData.password, formData.name, formData.company)
     if (!result.success) {
       setErrors({ general: result.error || 'Erro no cadastro' })
+    } else {
+      // ✅ Cadastro realizado com sucesso
+      // Mostrar mensagem e redirecionar para login
+      toast.success('✅ Cadastro realizado! Por favor, faça login.')
+      
+      // Limpar formulário
+      setFormData({
+        email: formData.email, // Manter email para facilitar login
+        password: '',
+        name: '',
+        company: ''
+      })
+      
+      // Redirecionar para login após 1 segundo
+      setTimeout(() => {
+        window.location.href = '/login'
+      }, 1000)
     }
   }
 
