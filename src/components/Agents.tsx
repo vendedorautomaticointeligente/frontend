@@ -1,11 +1,10 @@
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "./ui/card"
 import { Button as BaseButton } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
 import { Badge } from "./ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "./ui/dialog"
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
@@ -37,6 +36,7 @@ interface Plan {
 interface AgentFormData {
   // 0. NOME DO AGENTE (interno)
   nome_agente_pnh: string
+  conexao_whatsapp: string
 
   // 1. QUEM ATENDE
   agente_nome: string
@@ -85,10 +85,9 @@ export function Agents() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [loading, setLoading] = useState(true)
   const [creatingNewAgent, setCreatingNewAgent] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editingAgent, setEditingAgent] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [instances, setInstances] = useState<any[]>([])
-  const [selectedInstance, setSelectedInstance] = useState<string>("")
 
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 
@@ -99,6 +98,7 @@ export function Agents() {
 
   const emptyFormData: AgentFormData = {
     nome_agente_pnh: "",
+    conexao_whatsapp: "",
     agente_nome: "",
     agente_funcao: "",
     agente_jeito_falar: "",
@@ -145,6 +145,7 @@ export function Agents() {
       })
       if (response.ok) {
         const data = await response.json()
+        console.log('✅ Instâncias carregadas:', data.connections)
         setInstances(data.connections || [])
       }
     } catch (error) {
@@ -258,6 +259,33 @@ export function Agents() {
       })
 
       if (response.ok) {
+        const createdAgent = await response.json()
+        
+        // 🔥 NOVO: Se conexao_whatsapp foi preenchida, vincular ao agente criado
+        if (formData.conexao_whatsapp && createdAgent.agent?.id) {
+          try {
+            const assignResponse = await fetch(
+              `${baseUrl}/agents/${createdAgent.agent.id}/assign-instance`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                  instance_name: formData.conexao_whatsapp
+                })
+              }
+            )
+            
+            if (assignResponse.ok) {
+              console.log('✅ Novo agente vinculado à instância WhatsApp')
+            }
+          } catch (assignError) {
+            console.error('⚠️ Erro ao vincular novo agente:', assignError)
+          }
+        }
+
         await loadAgents()
         setCreatingNewAgent(false)
         resetForm()
@@ -351,11 +379,16 @@ export function Agents() {
 
   const openEditDialog = (agent: Agent) => {
     setSelectedAgent(agent)
+    loadInstances()
+    
+    console.log('🔍 DEBUG: Abrindo agente para edição', agent)
+    console.log('🔍 DEBUG: Dados do agente:', agent.data)
     
     // Criar um sanitizer de dados para garantir que nenhum valor seja null/undefined
     const sanitizeData = (data: any): AgentFormData => {
       return {
         nome_agente_pnh: data?.nome_agente_pnh ?? "",
+        conexao_whatsapp: data?.conexao_whatsapp ?? "",
         agente_nome: data?.agente_nome ?? "",
         agente_funcao: data?.agente_funcao ?? "",
         agente_jeito_falar: data?.agente_jeito_falar ?? "",
@@ -391,8 +424,8 @@ export function Agents() {
     
     const mergedData = sanitizeData(agent.data)
     setFormData(mergedData)
-    setShowEditDialog(true)
-    console.log('Opening edit dialog with sanitized agent data:', mergedData)
+    setEditingAgent(true)
+    console.log('Opening agent for editing:', mergedData)
   }
 
   const updateAgent = async () => {
@@ -412,6 +445,7 @@ export function Agents() {
       // Sanitizar dados antes de enviar (converter null para "")
       const sanitizedData = {
         nome_agente_pnh: formData.nome_agente_pnh || "",
+        conexao_whatsapp: formData.conexao_whatsapp || "",
         agente_nome: formData.agente_nome || "",
         agente_funcao: formData.agente_funcao || "",
         agente_jeito_falar: formData.agente_jeito_falar || "",
@@ -449,8 +483,35 @@ export function Agents() {
       })
 
       if (response.ok) {
+        // 🔥 NOVO: Se conexao_whatsapp foi preenchida, vincular ao agente
+        if (sanitizedData.conexao_whatsapp) {
+          try {
+            const assignResponse = await fetch(
+              `${baseUrl}/agents/${selectedAgent.id}/assign-instance`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${accessToken}`
+                },
+                body: JSON.stringify({
+                  instance_name: sanitizedData.conexao_whatsapp
+                })
+              }
+            )
+            
+            if (assignResponse.ok) {
+              console.log('✅ Agente vinculado à instância WhatsApp')
+            } else {
+              console.warn('⚠️ Erro ao vincular agente à instância')
+            }
+          } catch (assignError) {
+            console.error('❌ Erro ao vincular agente:', assignError)
+          }
+        }
+
         await loadAgents()
-        setShowEditDialog(false)
+        setEditingAgent(false)
         resetForm()
         toast.success('Agente atualizado com sucesso!')
         console.log('✅ Agent updated successfully')
@@ -556,21 +617,37 @@ export function Agents() {
                 {expandedSections.nome_agente && (
                   <div className="p-4 space-y-4 border-t bg-white">
                     <div className="space-y-2">
-                      <Label htmlFor="selected_instance">Instância WhatsApp *</Label>
-                      <select
-                        id="selected_instance"
-                        value={selectedInstance}
-                        onChange={(e) => setSelectedInstance(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Selecione uma instância...</option>
-                        {instances.map((inst) => (
-                          <option key={inst.id} value={inst.instance_name}>
-                            📱 {inst.phone_number || inst.instance_name} ({inst.instance_name})
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-slate-500">Escolha qual instância WhatsApp este agente atenderá</p>
+                      <Label htmlFor="conexao_whatsapp">Conexão Whatsapp *</Label>
+                      <div style={{ position: 'relative' }}>
+                        <select
+                          id="conexao_whatsapp"
+                          value={formData.conexao_whatsapp}
+                          onChange={(e) => handleFormChange('conexao_whatsapp', e.target.value)}
+                          style={{
+                            color: '#000000 !important' as any,
+                            backgroundColor: '#ffffff !important' as any,
+                            padding: '10px 12px !important' as any,
+                            border: '1px solid #cbd5e1 !important' as any,
+                            borderRadius: '6px !important' as any,
+                            fontSize: '14px !important' as any,
+                            cursor: 'pointer !important' as any,
+                            width: '100% !important' as any,
+                            appearance: 'auto !important' as any,
+                          }}
+                        >
+                          <option value="">Selecione uma conexão...</option>
+                          {instances.length > 0 ? (
+                            instances.map((inst) => (
+                              <option key={inst.id} value={inst.instanceName}>
+                                {inst.connectionName}
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>Nenhuma instância disponível</option>
+                          )}
+                        </select>
+                      </div>
+                      <p className="text-xs text-slate-500">Escolha qual conexão WhatsApp este agente utilizará</p>
                     </div>
                     <Separator />
                     <div className="space-y-2">
@@ -1153,28 +1230,31 @@ export function Agents() {
           </div>
         )}
 
-        {/* Edit Dialog */}
-        <Dialog 
-          open={showEditDialog} 
-          onOpenChange={(open: boolean) => {
-            if (!open) {
-              setShowEditDialog(false)
-              resetForm()
-              setSelectedAgent(null)
-            } else {
-              setShowEditDialog(true)
-            }
-          }}
-        >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Editar Agente</DialogTitle>
-              <DialogDescription>
-                Atualize as configurações do agente
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
+        {/* Edit Agent Form - Full Page */}
+        {editingAgent && (
+          <Card className="border border-slate-200 bg-slate-100/50">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Editar Agente</CardTitle>
+                  <CardDescription>
+                    Atualize as configurações do agente
+                  </CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setEditingAgent(false)
+                    resetForm()
+                    setSelectedAgent(null)
+                  }}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
               {/* 0. NOME DO AGENTE */}
               <div className="border border-slate-300 rounded-lg">
                 <button
@@ -1189,21 +1269,37 @@ export function Agents() {
                 {expandedSections.nome_agente && (
                   <div className="p-4 space-y-4 border-t bg-white">
                     <div className="space-y-2">
-                      <Label htmlFor="edit-selected_instance">Instância WhatsApp *</Label>
-                      <select
-                        id="edit-selected_instance"
-                        value={selectedInstance}
-                        onChange={(e) => setSelectedInstance(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Selecione uma instância...</option>
-                        {instances.map((inst) => (
-                          <option key={inst.id} value={inst.instance_name}>
-                            📱 {inst.phone_number || inst.instance_name} ({inst.instance_name})
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-xs text-slate-500">Escolha qual instância WhatsApp este agente atenderá</p>
+                      <Label htmlFor="edit-conexao_whatsapp">Conexão Whatsapp *</Label>
+                      <div style={{ position: 'relative' }}>
+                        <select
+                          id="edit-conexao_whatsapp"
+                          value={formData.conexao_whatsapp}
+                          onChange={(e) => handleFormChange('conexao_whatsapp', e.target.value)}
+                          style={{
+                            color: '#000000 !important' as any,
+                            backgroundColor: '#ffffff !important' as any,
+                            padding: '10px 12px !important' as any,
+                            border: '1px solid #cbd5e1 !important' as any,
+                            borderRadius: '6px !important' as any,
+                            fontSize: '14px !important' as any,
+                            cursor: 'pointer !important' as any,
+                            width: '100% !important' as any,
+                            appearance: 'auto !important' as any,
+                          }}
+                        >
+                          <option value="">Selecione uma conexão...</option>
+                          {instances.length > 0 ? (
+                            instances.map((inst) => (
+                              <option key={inst.id} value={inst.instanceName}>
+                                {inst.connectionName}
+                              </option>
+                            ))
+                          ) : (
+                            <option disabled>Nenhuma instância disponível</option>
+                          )}
+                        </select>
+                      </div>
+                      <p className="text-xs text-slate-500">Escolha qual conexão WhatsApp este agente utilizará</p>
                     </div>
                     <Separator />
                     <div className="space-y-2">
@@ -1600,18 +1696,22 @@ export function Agents() {
                   </div>
                 )}
               </div>
-            </div>
+            </CardContent>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+            <CardFooter className="flex gap-3">
+              <Button variant="outline" onClick={() => {
+                setEditingAgent(false)
+                resetForm()
+                setSelectedAgent(null)
+              }}>
                 Cancelar
               </Button>
               <Button onClick={updateAgent}>
                 Salvar Alterações
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </CardFooter>
+          </Card>
+        )}
       </div>
     </div>
   )

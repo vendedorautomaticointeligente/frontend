@@ -911,7 +911,7 @@ export function ConversationsPage() {
                           {conversation.name}
                         </p>
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200 flex-shrink-0">
-                          📱 {conversation.whatsappInstanceName?.slice(-6) || 'N/A'}
+                          📱 {conversation.whatsappInstanceName && instanceNamesMap[conversation.whatsappInstanceName] ? instanceNamesMap[conversation.whatsappInstanceName] : (conversation.whatsappInstanceName?.slice(-6) || 'N/A')}
                         </span>
                       </div>
                       {conversation.company && (
