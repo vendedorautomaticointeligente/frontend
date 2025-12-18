@@ -94,8 +94,17 @@ export function ConversationsPage() {
 
   // 🔥 AUTO-SCROLL PARA A ÚLTIMA MENSAGEM QUANDO NOVA CHEGAR
   useEffect(() => {
+    console.log('📍 useEffect auto-scroll acionado, total mensagens:', messages.length)
     if (messagesEndRef.current) {
+      console.log('📍 Fazendo scroll suave para a última mensagem')
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      
+      // Força scroll imediato também (em caso de smooth falhar)
+      setTimeout(() => {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView()
+        }
+      }, 100)
     }
   }, [messages])
 
@@ -108,9 +117,10 @@ export function ConversationsPage() {
 
     const connectSSE = () => {
       try {
-        // Usar URL com token como query parameter (EventSource não suporta headers)
-        const sseUrl = `${baseUrl}/sse/stream`
-        console.log('📡 Conectando ao SSE:', sseUrl)
+        // 🔥 IMPORTANTE: Passar token como query parameter
+        // EventSource não suporta headers customizados, então use query param
+        const sseUrl = `${baseUrl}/sse/stream?token=${accessToken}`
+        console.log('📡 Conectando ao SSE:', sseUrl.substring(0, 50) + '...')
         
         // Criar EventSource com configuração apropriada
         eventSource = new EventSource(sseUrl, {
@@ -121,6 +131,7 @@ export function ConversationsPage() {
         eventSource.addEventListener('connected', (event) => {
           console.log('✅ Conectado ao stream SSE')
           setSseConnected(true)
+          console.log('🟢 SSE Status:', true)
         })
 
         // Listener para mensagens recebidas
@@ -195,6 +206,7 @@ export function ConversationsPage() {
         // Listener para erro
         eventSource.onerror = (error) => {
           console.error('❌ Erro na conexão SSE:', error)
+          console.error('🔴 SSE readyState:', eventSource?.readyState)
           setSseConnected(false)
 
           // Fechar conexão em erro
@@ -204,6 +216,7 @@ export function ConversationsPage() {
           }
 
           // Reconectar em 5 segundos
+          console.log('🔄 Agendando reconexão SSE em 5 segundos...')
           reconnectTimeout = setTimeout(() => {
             console.log('🔄 Tentando reconectar SSE...')
             connectSSE()
@@ -1087,6 +1100,16 @@ export function ConversationsPage() {
 
             {/* Message Input - Fixed at bottom */}
             <div className="bg-white border-t border-gray-200 p-3 flex-shrink-0">
+              {/* SSE Status Indicator */}
+              <div className="mb-2 flex items-center justify-between px-2 py-1 bg-gray-50 rounded text-xs">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+                  <span className={sseConnected ? 'text-green-700' : 'text-red-700'}>
+                    {sseConnected ? '🟢 SSE Conectado - Atualizações em tempo real' : '🔴 SSE Desconectado - Mensagens podem atrasar'}
+                  </span>
+                </div>
+              </div>
+              
               <div className="flex items-end gap-3">
                 <div className="flex gap-2 relative">
                   {/* Emoji Button */}
