@@ -283,30 +283,31 @@ export function ConversationsPage() {
     const fetchConversations = async (showLoading = true) => {
       try {
         if (showLoading && !loading) setLoading(true)
-        // Log apenas na primeira requisição
-        if (showLoading) {
-          console.log('🌐 Fazendo requisição para:', `${baseUrl}/conversations`)
-        }
+        
+        console.log('🌐 Iniciando requisição de conversas...')
+        console.log('📍 Base URL:', baseUrl)
+        console.log('📍 Token:', accessToken ? accessToken.substring(0, 20) + '...' : 'VAZIO')
+        
         const response = await fetch(`${baseUrl}/conversations`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
+          method: 'GET',
+          headers: { 
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
         })
         
-        // Log status apenas se houver erro
-        if (!response.ok) {
-          console.log('❌ Response status:', response.status)
-        }
+        console.log('📊 Status da resposta:', response.status, response.statusText)
         
         if (!response.ok) {
           const errorText = await response.text()
-          console.error('❌ Erro na requisição:', response.status, errorText)
+          console.error('❌ Erro HTTP:', response.status, errorText)
+          setConversations([])
+          toast.error(`Erro ao carregar conversas: ${response.status}`)
           return
         }
         
         const data = await response.json()
-        // Log detalhado apenas na primeira carga
-        if (showLoading) {
-          console.log('📊 Conversas carregadas:', data.data?.data?.length || 0)
-        }
+        console.log('✅ Resposta recebida:', data)
         
         if (data.status === 'success' && data.data && data.data.data) {
           // Converter dados da API para formato do componente
@@ -324,80 +325,37 @@ export function ConversationsPage() {
             whatsappInstanceName: conv.whatsapp_instance_name
           }))
           
-          console.log('🔄 Conversas carregadas:', mapped.length)
+          console.log('🔄 Conversas mapeadas:', mapped.length)
+          setConversations(mapped)
           
-          // 🔥 MERGE INTELIGENTE: Ao fazer polling, atualiza apenas conversas que mudaram
-          // Em vez de substituir todo o array (causando re-render de tudo)
-          if (showLoading === false && conversations.length > 0) {
-            // Polling: fazer merge inteligente
-            setConversations(prev => {
-              const merged = [...prev]
-              
-              mapped.forEach(newConv => {
-                const existingIndex = merged.findIndex(c => c.id === newConv.id)
-                
-                if (existingIndex >= 0) {
-                  // Atualizar apenas campos que mudaram
-                  merged[existingIndex] = {
-                    ...merged[existingIndex],
-                    lastMessage: newConv.lastMessage,
-                    lastMessageTime: newConv.lastMessageTime,
-                    unread: newConv.unread
-                  }
-                } else {
-                  // Adicionar nova conversa
-                  merged.push(newConv)
-                }
-              })
-              
-              // Remover conversas que não existem mais na API
-              return merged.filter(existing =>
-                mapped.some(m => m.id === existing.id)
-              )
-            })
-          } else {
-            // Primeira carga: substituir tudo
-            setConversations(mapped)
-          }
-          
-          // Selecionar primeira conversa APENAS na primeira carga (quando não há histórico de seleção)
-          const currentSelected = selectedConversation
-          const stillExists = currentSelected && mapped.find(c => c.id === currentSelected.id)
-          
-          // Só selecionar automaticamente se:
-          // 1. Não há conversa selecionada E é a primeira carga (conversations estava vazio)
-          // 2. OU se a conversa selecionada não existe mais
-          if (mapped.length > 0 && !currentSelected && conversations.length === 0) {
-            console.log('✅ Primeira carga: selecionando conversa:', mapped[0].name)
-            setSelectedConversation(mapped[0])
-          } else if (currentSelected && !stillExists && mapped.length > 0) {
-            console.log('⚠️ Conversa selecionada não existe mais, selecionando primeira:', mapped[0].name)
+          // Selecionar primeira conversa
+          if (mapped.length > 0 && !selectedConversation) {
+            console.log('✅ Selecionando primeira conversa:', mapped[0].name)
             setSelectedConversation(mapped[0])
           }
+        } else {
+          console.warn('⚠️ Resposta sem conversas:', data)
+          setConversations([])
         }
       } catch (error) {
-        console.error('Erro ao carregar conversas:', error)
-        if (conversations.length === 0) {
-          toast.error('Erro ao carregar conversas')
-        }
+        console.error('❌ Erro ao carregar conversas:', error)
+        setConversations([])
+        toast.error('Erro ao carregar conversas: ' + (error instanceof Error ? error.message : 'Desconhecido'))
       } finally {
         if (showLoading) setLoading(false)
       }
     }
 
     if (accessToken) {
-      console.log('🔑 Token disponível, carregando conversas...', accessToken.substring(0, 10) + '...')
+      console.log('🔑 Token disponível, carregando conversas...')
       fetchConversations()
-      
-      // 🔥 REMOVIDO: Polling de 30 segundos
-      // SSE (Server-Sent Events) já fornece atualizações em tempo real
-      // Polling causava re-renders visuais desnecessários
       
       return () => {
         // Cleanup se necessário
       }
     } else {
-      console.log('❌ SEM TOKEN! Usuário não está logado ou token não foi carregado')
+      console.log('❌ SEM TOKEN! Usuário não está logado')
+      setLoading(false)
     }
   }, [accessToken, baseUrl])
 
