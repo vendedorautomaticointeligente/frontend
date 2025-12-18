@@ -312,7 +312,40 @@ export function ConversationsPage() {
           }))
           
           console.log('🔄 Conversas carregadas:', mapped.length)
-          setConversations(mapped)
+          
+          // 🔥 MERGE INTELIGENTE: Ao fazer polling, atualiza apenas conversas que mudaram
+          // Em vez de substituir todo o array (causando re-render de tudo)
+          if (showLoading === false && conversations.length > 0) {
+            // Polling: fazer merge inteligente
+            setConversations(prev => {
+              const merged = [...prev]
+              
+              mapped.forEach(newConv => {
+                const existingIndex = merged.findIndex(c => c.id === newConv.id)
+                
+                if (existingIndex >= 0) {
+                  // Atualizar apenas campos que mudaram
+                  merged[existingIndex] = {
+                    ...merged[existingIndex],
+                    lastMessage: newConv.lastMessage,
+                    lastMessageTime: newConv.lastMessageTime,
+                    unread: newConv.unread
+                  }
+                } else {
+                  // Adicionar nova conversa
+                  merged.push(newConv)
+                }
+              })
+              
+              // Remover conversas que não existem mais na API
+              return merged.filter(existing =>
+                mapped.some(m => m.id === existing.id)
+              )
+            })
+          } else {
+            // Primeira carga: substituir tudo
+            setConversations(mapped)
+          }
           
           // Selecionar primeira conversa APENAS na primeira carga (quando não há histórico de seleção)
           const currentSelected = selectedConversation
@@ -343,13 +376,12 @@ export function ConversationsPage() {
       console.log('🔑 Token disponível, carregando conversas...', accessToken.substring(0, 10) + '...')
       fetchConversations()
       
-      // Polling a cada 30 segundos para atualizar conversas
-      const conversationsInterval = setInterval(() => {
-        fetchConversations(false) // false = não mostrar loading
-      }, 30000)
+      // 🔥 REMOVIDO: Polling de 30 segundos
+      // SSE (Server-Sent Events) já fornece atualizações em tempo real
+      // Polling causava re-renders visuais desnecessários
       
       return () => {
-        clearInterval(conversationsInterval)
+        // Cleanup se necessário
       }
     } else {
       console.log('❌ SEM TOKEN! Usuário não está logado ou token não foi carregado')
@@ -396,49 +428,6 @@ export function ConversationsPage() {
 
     // Carregar mensagens iniciais
     fetchMessages()
-
-    // Conectar ao SSE para receber mensagens em tempo real
-    const connectSSE = () => {
-      const sseUrl = `${baseUrl}/sse/stream`
-      console.log('🔌 Conectando ao SSE:', sseUrl)
-      
-      const eventSource = new EventSource(sseUrl, { withCredentials: true })
-      
-      eventSource.addEventListener('open', () => {
-        console.log('✅ Conectado ao stream SSE')
-      })
-
-      eventSource.addEventListener('message_received', (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          console.log('💬 Novo evento SSE recebido:', data)
-          
-          // Recarregar mensagens se for da conversa atual
-          if (selectedConversation && data.conversation_id === selectedConversation.id) {
-            console.log('🔄 Atualizando mensagens em tempo real...')
-            fetchMessages(false)
-          }
-        } catch (error) {
-          console.error('Erro ao processar evento SSE:', error)
-        }
-      })
-
-      eventSource.addEventListener('error', (error) => {
-        console.error('❌ Erro no SSE:', error)
-        eventSource.close()
-        // Reconectar após 5 segundos
-        setTimeout(connectSSE, 5000)
-      })
-
-      return eventSource
-    }
-
-    const eventSource = connectSSE()
-
-    return () => {
-      eventSource.close()
-      console.log('🔌 SSE desconectado')
-    }
   }, [selectedConversation, baseUrl, accessToken])
 
   // Filter conversations
