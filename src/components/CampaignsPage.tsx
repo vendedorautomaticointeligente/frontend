@@ -1,30 +1,22 @@
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Button } from "./ui/button"
-import { Input } from "./ui/input"
-import { Label } from "./ui/label"
-import { Textarea } from "./ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { Badge } from "./ui/badge"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "./ui/dialog"
 import { Progress } from "./ui/progress"
-import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
 import { 
   Send, 
   Plus, 
-  Edit, 
   Trash2, 
   Play, 
   Pause,
   Mail,
   MessageSquare,
-  BarChart3,
-  Clock,
   CheckCircle,
   Eye,
-  Loader2
+  Loader2,
+  Edit
 } from "lucide-react"
 
 interface Campaign {
@@ -46,51 +38,30 @@ interface Campaign {
   opened: number
   replied: number
   createdAt: string
+  // Novos campos para processamento ativo
+  is_active?: boolean
+  processing_status?: {
+    current: number
+    total: number
+    success: number
+    failed: number
+    status: string
+  }
+  start_time?: string
+  end_time?: string
+  message?: string
 }
 
-interface ListData {
-  id: string
-  name: string
-  totalContacts: number
+
+interface CampaignsPageProps {
+  onCreateCampaign?: () => void
+  onEditCampaign?: () => void
 }
 
-interface AgentData {
-  id: string
-  name: string
-  tone: string
-}
-
-interface WhatsAppConnection {
-  id: string
-  name: string
-  phoneNumber: string
-  status: 'connected' | 'disconnected'
-}
-
-export function CampaignsPage() {
+export function CampaignsPage({ onCreateCampaign, onEditCampaign }: CampaignsPageProps = {}) {
   const { accessToken } = useAuth()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
-  const [showNewCampaignDialog, setShowNewCampaignDialog] = useState(false)
-  const [showEditDialog, setShowEditDialog] = useState(false)
-  const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null)
-  
-  // Available data for selection
-  const [availableLists, setAvailableLists] = useState<ListData[]>([])
-  const [availableAgents, setAvailableAgents] = useState<AgentData[]>([])
-  const [whatsappConnections, setWhatsappConnections] = useState<WhatsAppConnection[]>([])
-  
-  // Form fields
-  const [campaignName, setCampaignName] = useState("")
-  const [campaignDescription, setCampaignDescription] = useState("")
-  const [selectedList, setSelectedList] = useState("")
-  const [selectedAgent, setSelectedAgent] = useState("")
-  const [selectedWhatsappConnection, setSelectedWhatsappConnection] = useState("")
-  const [selectedChannel, setSelectedChannel] = useState<'email' | 'whatsapp' | 'dm' | 'messenger'>('email')
-  const [scheduleType, setScheduleType] = useState<'scheduled' | 'immediate'>('scheduled')
-  const [scheduledDate, setScheduledDate] = useState("")
-  const [campaignMessage, setCampaignMessage] = useState("")
-
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
   
   const getHeaders = (includeContentType = false) => ({
@@ -100,8 +71,19 @@ export function CampaignsPage() {
 
   useEffect(() => {
     loadCampaigns()
-    loadAvailableData()
   }, [])
+
+  // Polling para campanhas ativas
+  useEffect(() => {
+    const activeCampaigns = campaigns.filter(c => c.is_active)
+    if (activeCampaigns.length === 0) return
+
+    const interval = setInterval(() => {
+      loadCampaigns() // Recarrega todas as campanhas para atualizar status
+    }, 10000) // A cada 10 segundos
+
+    return () => clearInterval(interval)
+  }, [campaigns.filter(c => c.is_active).length])
 
   const loadCampaigns = async () => {
     try {
@@ -119,47 +101,6 @@ export function CampaignsPage() {
       toast.error('Erro ao carregar campanhas')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const loadAvailableData = async () => {
-    try {
-      const listResponse = await fetch(`${baseUrl}/lists`, {
-        headers: getHeaders()
-      })
-      const agentResponse = await fetch(`${baseUrl}/agents`, {
-        headers: getHeaders()
-      })
-      const whatsappResponse = await fetch(`${baseUrl}/whatsapp-connections`, {
-        headers: getHeaders()
-      })
-
-      if (listResponse.ok) {
-        const listData = await listResponse.json()
-        console.log('📋 Listas carregadas:', listData)
-        setAvailableLists(listData.lists || [])
-      } else {
-        console.error('Erro ao carregar listas:', await listResponse.text())
-      }
-      
-      if (agentResponse.ok) {
-        const agentData = await agentResponse.json()
-        console.log('🤖 Agentes carregados:', agentData)
-        setAvailableAgents(agentData.agents || [])
-      } else {
-        console.error('Erro ao carregar agentes:', await agentResponse.text())
-      }
-      
-      if (whatsappResponse.ok) {
-        const whatsappData = await whatsappResponse.json()
-        console.log('📱 Conexões WhatsApp carregadas:', whatsappData)
-        setWhatsappConnections(whatsappData.connections || [])
-      } else {
-        console.error('Erro ao carregar conexões WhatsApp:', await whatsappResponse.text())
-      }
-    } catch (error) {
-      console.error('Error loading available data:', error)
-      toast.error('Erro ao carregar dados disponíveis')
     }
   }
 
@@ -193,49 +134,15 @@ export function CampaignsPage() {
     }
   }
 
-  const addCampaign = async () => {
-    if (!campaignName) {
-      toast.error('Preencha o nome da campanha')
-      return
-    }
-    
-    if (!campaignMessage) {
-      toast.error('Preencha a mensagem da campanha')
-      return
-    }
-
-    try {
-      const response = await fetch(`${baseUrl}/campaigns`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          name: campaignName,
-          description: campaignDescription,
-          message: campaignMessage,
-          targetList: selectedList,
-          agent: selectedAgent,
-          channel: selectedChannel,
-          schedule: scheduleType,
-          scheduledDate: scheduleType === 'scheduled' ? scheduledDate : null,
-          status: 'draft',
-          whatsappConnectionId: selectedChannel === 'whatsapp' ? selectedWhatsappConnection : undefined
-        })
-      })
-
-      if (response.ok) {
-        await loadCampaigns()
-        setShowNewCampaignDialog(false)
-        resetForm()
-        toast.success('Campanha criada!')
-      } else {
-        toast.error('Erro ao criar campanha')
-      }
-    } catch (error) {
-      console.error('Error creating campaign:', error)
-      toast.error('Erro ao criar campanha')
+  const editCampaign = (campaign: any) => {
+    // Store campaign data in localStorage for editing
+    localStorage.setItem('editCampaignData', JSON.stringify(campaign))
+    // Navigate to create page using the provided callback
+    if (onEditCampaign) {
+      onEditCampaign()
+    } else {
+      // Fallback if no callback provided
+      window.location.href = '/campaigns/create'
     }
   }
 
@@ -262,42 +169,62 @@ export function CampaignsPage() {
     }
   }
 
-  const toggleCampaignStatus = async (campaign: Campaign) => {
-    const newStatus = campaign.status === 'active' ? 'paused' : 'active'
-    
+  const startCampaign = async (campaignId: string) => {
     try {
-      const response = await fetch(`${baseUrl}/campaigns/${campaign.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`
-        },
-        body: JSON.stringify({
-          status: newStatus
-        })
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/start`, {
+        method: 'POST',
+        headers: getHeaders(true)
       })
 
       if (response.ok) {
         await loadCampaigns()
-        toast.success(`Campanha ${newStatus === 'active' ? 'ativada' : 'pausada'}!`)
+        toast.success('Campanha iniciada!')
       } else {
-        toast.error('Erro ao atualizar status')
+        const error = await response.json()
+        toast.error(error.message || 'Erro ao iniciar campanha')
       }
     } catch (error) {
-      console.error('Error updating campaign status:', error)
-      toast.error('Erro ao atualizar status')
+      console.error('Error starting campaign:', error)
+      toast.error('Erro ao iniciar campanha')
     }
   }
 
-  const resetForm = () => {
-    setCampaignName("")
-    setCampaignDescription("")
-    setSelectedList("")
-    setSelectedAgent("")
-    setScheduledDate("")
-    setCampaignMessage("")
-    setSelectedWhatsappConnection("")
-    setSelectedCampaign(null)
+  const pauseCampaign = async (campaignId: string) => {
+    try {
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/pause`, {
+        method: 'POST',
+        headers: getHeaders(true)
+      })
+
+      if (response.ok) {
+        await loadCampaigns()
+        toast.success('Campanha pausada!')
+      } else {
+        toast.error('Erro ao pausar campanha')
+      }
+    } catch (error) {
+      console.error('Error pausing campaign:', error)
+      toast.error('Erro ao pausar campanha')
+    }
+  }
+
+  const stopCampaign = async (campaignId: string) => {
+    try {
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/stop`, {
+        method: 'POST',
+        headers: getHeaders(true)
+      })
+
+      if (response.ok) {
+        await loadCampaigns()
+        toast.success('Campanha parada!')
+      } else {
+        toast.error('Erro ao parar campanha')
+      }
+    } catch (error) {
+      console.error('Error stopping campaign:', error)
+      toast.error('Erro ao parar campanha')
+    }
   }
 
   if (loading) {
@@ -325,208 +252,10 @@ export function CampaignsPage() {
             </p>
           </div>
           
-          <Dialog open={showNewCampaignDialog} onOpenChange={setShowNewCampaignDialog}>
-            <DialogTrigger asChild>
-              <Button onClick={() => resetForm()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Campanha
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Criar Nova Campanha</DialogTitle>
-                <DialogDescription>
-                  Configure sua campanha de disparos
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nome da Campanha *</Label>
-                  <Input
-                    id="name"
-                    value={campaignName}
-                    onChange={(e) => setCampaignName(e.target.value)}
-                    placeholder="Ex: Prospecção Q1 2024"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="description">Descrição</Label>
-                  <Textarea
-                    id="description"
-                    value={campaignDescription}
-                    onChange={(e) => setCampaignDescription(e.target.value)}
-                    placeholder="Descreva o objetivo desta campanha..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="list">Lista de Contatos</Label>
-                  <Select value={selectedList} onValueChange={(v) => setSelectedList(v)}>
-                    <SelectTrigger id="list">
-                      <SelectValue placeholder="Selecione uma lista" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableLists.length === 0 ? (
-                        <SelectItem value="no-lists" disabled>
-                          Nenhuma lista disponível - Crie uma lista primeiro
-                        </SelectItem>
-                      ) : (
-                        availableLists.map(list => (
-                          <SelectItem key={list.id} value={list.id}>
-                            {list.name} ({list.totalContacts} contatos)
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="agent">Agente de Abordagem</Label>
-                  <Select value={selectedAgent} onValueChange={(v) => setSelectedAgent(v)}>
-                    <SelectTrigger id="agent">
-                      <SelectValue placeholder="Selecione um agente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {availableAgents.length === 0 ? (
-                        <SelectItem value="no-agents" disabled>
-                          Nenhum agente disponível - Crie um agente primeiro
-                        </SelectItem>
-                      ) : (
-                        availableAgents.map(agent => (
-                          <SelectItem key={agent.id} value={agent.id}>
-                            {agent.name} ({agent.tone})
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="channel">Canal de Envio</Label>
-                  <Select value={selectedChannel} onValueChange={(v) => setSelectedChannel(v as any)}>
-                    <SelectTrigger id="channel">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="email">Email</SelectItem>
-                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                      <SelectItem value="dm">DM</SelectItem>
-                      <SelectItem value="messenger">Messenger</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {selectedChannel === 'whatsapp' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="whatsappConnection">Conexão WhatsApp</Label>
-                    <Select value={selectedWhatsappConnection} onValueChange={(v) => setSelectedWhatsappConnection(v)}>
-                      <SelectTrigger id="whatsappConnection">
-                        <SelectValue placeholder="Selecione uma conexão" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {whatsappConnections.map(connection => (
-                          <SelectItem key={connection.id} value={connection.id}>
-                            {connection.name} ({connection.phoneNumber})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  <Label htmlFor="message">Mensagem *</Label>
-                  <Textarea
-                    id="message"
-                    value={campaignMessage}
-                    onChange={(e) => setCampaignMessage(e.target.value)}
-                    placeholder="Escreva a mensagem que será enviada..."
-                    rows={5}
-                  />
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    <p className="text-xs text-muted-foreground w-full mb-1">
-                      Variáveis disponíveis (clique para inserir):
-                    </p>
-                    {[
-                      { label: 'Nome', value: '{nome}' },
-                      { label: 'Empresa', value: '{empresa}' },
-                      { label: 'Cargo', value: '{cargo}' },
-                      { label: 'Email', value: '{email}' },
-                      { label: 'Telefone', value: '{telefone}' },
-                      { label: 'Cidade', value: '{cidade}' },
-                      { label: 'Estado', value: '{estado}' }
-                    ].map((variable) => (
-                      <Button
-                        key={variable.value}
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="text-xs h-7"
-                        onClick={() => {
-                          const textarea = document.getElementById('message') as HTMLTextAreaElement
-                          const cursorPos = textarea.selectionStart
-                          const textBefore = campaignMessage.substring(0, cursorPos)
-                          const textAfter = campaignMessage.substring(cursorPos)
-                          setCampaignMessage(textBefore + variable.value + textAfter)
-                          
-                          // Reposiciona o cursor
-                          setTimeout(() => {
-                            textarea.focus()
-                            textarea.setSelectionRange(
-                              cursorPos + variable.value.length,
-                              cursorPos + variable.value.length
-                            )
-                          }, 0)
-                        }}
-                      >
-                        {variable.label}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="scheduleType">Agendamento</Label>
-                  <Select value={scheduleType} onValueChange={(v) => setScheduleType(v as any)}>
-                    <SelectTrigger id="scheduleType">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="scheduled">Agendada</SelectItem>
-                      <SelectItem value="immediate">Imediata</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {scheduleType === 'scheduled' && (
-                  <div className="space-y-2">
-                    <Label htmlFor="scheduled">Data/Hora Agendada</Label>
-                    <Input
-                      id="scheduled"
-                      type="datetime-local"
-                      value={scheduledDate}
-                      onChange={(e) => setScheduledDate(e.target.value)}
-                    />
-                  </div>
-                )}
-              </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowNewCampaignDialog(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={addCampaign}>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Criar Campanha
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+          <Button onClick={onCreateCampaign}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Campanha
+          </Button>
         </div>
 
         {/* Stats */}
@@ -589,7 +318,7 @@ export function CampaignsPage() {
               <p className="text-sm text-muted-foreground mb-4">
                 Crie sua primeira campanha para começar a enviar mensagens
               </p>
-              <Button onClick={() => setShowNewCampaignDialog(true)}>
+              <Button onClick={onCreateCampaign}>
                 <Plus className="w-4 h-4 mr-2" />
                 Criar Primeira Campanha
               </Button>
@@ -600,7 +329,7 @@ export function CampaignsPage() {
             {campaigns.map((campaign) => {
               const ChannelIcon = getChannelIcon(campaign.channel)
               const progress = campaign.totalContacts > 0 
-                ? (campaign.sent / campaign.totalContacts) * 100 
+                ? Math.min((campaign.sent / campaign.totalContacts) * 100, 100) 
                 : 0
 
               return (
@@ -621,17 +350,47 @@ export function CampaignsPage() {
                         <CardDescription>{campaign.description}</CardDescription>
                       </div>
                       <div className="flex gap-2">
+                        {!campaign.is_active && campaign.status !== 'completed' && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startCampaign(campaign.id)}
+                            className="text-green-600"
+                          >
+                            <Play className="w-4 h-4 mr-1" />
+                            Iniciar
+                          </Button>
+                        )}
+                        {campaign.is_active && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => pauseCampaign(campaign.id)}
+                            className="text-yellow-600"
+                          >
+                            <Pause className="w-4 h-4 mr-1" />
+                            Pausar
+                          </Button>
+                        )}
+                        {campaign.is_active && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => stopCampaign(campaign.id)}
+                            className="text-red-600"
+                          >
+                            <Pause className="w-4 h-4 mr-1" />
+                            Parar
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => toggleCampaignStatus(campaign)}
-                          disabled={campaign.status === 'completed'}
+                          onClick={() => editCampaign(campaign)}
+                          className="text-blue-600"
                         >
-                          {campaign.status === 'running' ? (
-                            <Pause className="w-4 h-4" />
-                          ) : (
-                            <Play className="w-4 h-4" />
-                          )}
+                          <Edit className="w-4 h-4 mr-1" />
+                          Editar
                         </Button>
                         <Button
                           variant="outline"
@@ -645,14 +404,47 @@ export function CampaignsPage() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
+                    {/* Status de processamento ativo */}
+                    {campaign.is_active && campaign.processing_status && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-800">
+                            📊 {campaign.processing_status.current}/{campaign.processing_status.total} 
+                            ({campaign.processing_status.total > 0 ? Math.round((campaign.processing_status.current / campaign.processing_status.total) * 100) : 0}%)
+                          </span>
+                          <Badge variant="outline" className="text-blue-700">
+                            {campaign.processing_status.status}
+                          </Badge>
+                        </div>
+                        <div className="flex gap-4 text-xs text-blue-700">
+                          <span>✅ {campaign.processing_status.success} Sucessos</span>
+                          <span>❌ {campaign.processing_status.failed} Falhas</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Horário de funcionamento */}
+                    {campaign.start_time && campaign.end_time && (
+                      <div className="text-xs text-muted-foreground">
+                        🕐 Funcionamento: {campaign.start_time} - {campaign.end_time}
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-sm">
                         <span>Progresso</span>
                         <span className="font-medium">
-                          {campaign.sent} / {campaign.totalContacts}
+                          {campaign.processing_status ? campaign.processing_status.current : campaign.sent} / {campaign.totalContacts}
                         </span>
                       </div>
-                      <Progress value={progress} className="h-2" />
+                      <Progress 
+                        value={
+                          campaign.processing_status && campaign.processing_status.total > 0 
+                            ? Math.min((campaign.processing_status.current / campaign.processing_status.total) * 100, 100)
+                            : progress
+                        } 
+                        className="h-2" 
+                      />
                     </div>
 
                     <div className="grid grid-cols-4 gap-4 text-center text-sm">
