@@ -441,7 +441,7 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign }: CampaignsPag
                         value={
                           campaign.processing_status && campaign.processing_status.total > 0 
                             ? Math.min((campaign.processing_status.current / campaign.processing_status.total) * 100, 100)
-                            : progress
+                            : (campaign.totalContacts > 0 ? Math.min((campaign.sent / campaign.totalContacts) * 100, 100) : 0)
                         } 
                         className="h-2" 
                       />
