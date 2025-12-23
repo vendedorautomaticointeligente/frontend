@@ -8,10 +8,10 @@ import { Badge } from "./ui/badge"
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
-
-// Type assertion for Button with variant and size props
-const Button = BaseButton as any
-import { 
+import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
+import { readJsonCache, writeJsonCache } from "../utils/localCache"
+import { getApiUrl } from '../utils/apiConfig'
+import {
   Bot, 
   Plus, 
   Edit, 
@@ -20,10 +20,24 @@ import {
   Pause,
   Sparkles,
   Copy,
+  RefreshCw,
   Loader2,
   X,
-  ChevronDown
+  ChevronDown,
+  AlertCircle
 } from "lucide-react"
+
+const AGENTS_CACHE_KEY = "agents_cache"
+const AGENTS_META_CACHE_KEY = "agents_cache_meta"
+const INSTANCES_CACHE_KEY = "agents_instances_cache"
+const INSTANCES_META_CACHE_KEY = "agents_instances_cache_meta"
+
+type LoadAgentsOptions = {
+  silent?: boolean
+}
+
+// Type assertion for Button with variant and size props
+const Button = BaseButton as any
 
 interface Plan {
   name: string
@@ -69,6 +83,9 @@ interface AgentFormData {
   atendimento_frases_sugeridas: string
   atendimento_evitar: string
   atendimento_resposta_padrao_fora_escopo: string
+
+  // 6. INFORMAÇÕES ADICIONAIS
+  informacoes_adicionais: string
 }
 
 interface Agent {
@@ -82,19 +99,86 @@ interface Agent {
 
 export function Agents() {
   const { accessToken } = useAuth()
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [loading, setLoading] = useState(true)
+  const initialAgents = readJsonCache<Agent[]>(AGENTS_CACHE_KEY) ?? []
+  const initialInstances = readJsonCache<any[]>(INSTANCES_CACHE_KEY) ?? []
+  const [agents, setAgents] = useState<Agent[]>(initialAgents)
+  const [instances, setInstances] = useState<any[]>(initialInstances)
+  const [loading, setLoading] = useState(initialAgents.length === 0 && initialInstances.length === 0)
   const [creatingNewAgent, setCreatingNewAgent] = useState(false)
   const [editingAgent, setEditingAgent] = useState(false)
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
-  const [instances, setInstances] = useState<any[]>([])
+  const [lastInstancesSync, setLastInstancesSync] = useState<string | null>(() => {
+    const cachedMeta = readJsonCache<{ lastSync?: string }>(INSTANCES_META_CACHE_KEY)
+    return cachedMeta?.lastSync ? new Date(cachedMeta.lastSync).toLocaleTimeString() : null
+  })
+  const [lastAgentsSync, setLastAgentsSync] = useState<string | null>(() => {
+    const cachedMeta = readJsonCache<{ lastSync?: string }>(AGENTS_META_CACHE_KEY)
+    return cachedMeta?.lastSync ? new Date(cachedMeta.lastSync).toLocaleTimeString() : null
+  })
+  const [lastAgentsError, setLastAgentsError] = useState<string | null>(null)
+  const [lastInstancesError, setLastInstancesError] = useState<string | null>(null)
+  const [isRefreshingAgents, setIsRefreshingAgents] = useState(false)
+  const [isRefreshingInstances, setIsRefreshingInstances] = useState(false)
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+
+  const baseUrl = getApiUrl()
 
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,
     ...(includeContentType && { 'Content-Type': 'application/json' })
   })
+
+  const persistAgents = (agentsList: Agent[]) => {
+    setAgents(agentsList)
+    writeJsonCache(AGENTS_CACHE_KEY, agentsList)
+    const now = new Date()
+    writeJsonCache(AGENTS_META_CACHE_KEY, { lastSync: now.toISOString() })
+    setLastAgentsSync(now.toLocaleTimeString())
+  }
+
+  const persistInstances = (instancesList: any[]) => {
+    setInstances(instancesList)
+    writeJsonCache(INSTANCES_CACHE_KEY, instancesList)
+    const now = new Date()
+    writeJsonCache(INSTANCES_META_CACHE_KEY, { lastSync: now.toISOString() })
+    setLastInstancesSync(now.toLocaleTimeString())
+  }
+
+  const assignAgentInstance = async (agentId: string, instanceName: string) => {
+    try {
+      const response = await safeFetch(
+        `${baseUrl}/agents/${agentId}/assign-instance`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({
+            instance_name: instanceName
+          })
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response) {
+        setLastAgentsError('Tempo limite ao vincular agente ao WhatsApp')
+        return false
+      }
+
+      if (!response.ok) {
+        console.warn('Erro ao vincular agente à instância', await response.text().catch(() => response.status))
+        setLastAgentsError('Erro ao vincular agente ao WhatsApp')
+        return false
+      }
+
+      return true
+    } catch (error) {
+      console.error('Erro ao vincular agente:', error)
+      setLastAgentsError('Erro ao vincular agente ao WhatsApp')
+      return false
+    }
+  }
 
   const emptyFormData: AgentFormData = {
     nome_agente_pnh: "",
@@ -120,7 +204,8 @@ export function Agents() {
     atendimento_conducao: "",
     atendimento_frases_sugeridas: "",
     atendimento_evitar: "",
-    atendimento_resposta_padrao_fora_escopo: ""
+    atendimento_resposta_padrao_fora_escopo: "",
+    informacoes_adicionais: ""
   }
 
   const [formData, setFormData] = useState<AgentFormData>(emptyFormData)
@@ -130,45 +215,146 @@ export function Agents() {
     sobre_empresa: false,
     sobre_produto: false,
     planos_precos: false,
-    como_funciona: false
+    como_funciona: false,
+    informacoes_adicionais: false
   })
 
-  useEffect(() => {
-    loadAgents()
-    loadInstances()
-  }, [])
+  const loadAgentsAndInstances = async (options: LoadAgentsOptions = {}) => {
+    if (!accessToken) return
+    setIsRefreshingAgents(true)
+    setIsRefreshingInstances(true)
 
-  const loadInstances = async () => {
     try {
-      const response = await fetch(`${baseUrl}/whatsapp/connections`, {
-        headers: getHeaders()
-      })
-      if (response.ok) {
-        const data = await response.json()
-        console.log('✅ Instâncias carregadas:', data.connections)
-        setInstances(data.connections || [])
+      const [agentsResponse, instancesResponse] = await Promise.allSettled([
+        safeFetch(`${baseUrl}/agents`, { headers: getHeaders() }, { timeout: FETCH_DEFAULT_TIMEOUT }),
+        safeFetch(`${baseUrl}/whatsapp/connections`, { headers: getHeaders() }, { timeout: FETCH_DEFAULT_TIMEOUT })
+      ])
+
+      const handleAgentsResult = async () => {
+        if (agentsResponse.status === 'fulfilled') {
+          const response = agentsResponse.value
+          if (!response) {
+            setLastAgentsError('Tempo limite ao atualizar agentes')
+            return
+          }
+          if (!response.ok) {
+            console.error('Erro ao atualizar agentes:', await response.text().catch(() => response.status))
+            setLastAgentsError('Erro ao atualizar agentes')
+            return
+          }
+          const data = await response.json()
+          persistAgents(data.agents || [])
+          setLastAgentsError(null)
+        } else {
+          console.error('Erro ao sincronizar agentes:', agentsResponse.reason)
+          setLastAgentsError('Erro ao atualizar agentes')
+        }
       }
+
+      const handleInstancesResult = async () => {
+        if (instancesResponse.status === 'fulfilled') {
+          const response = instancesResponse.value
+          if (!response) {
+            setLastInstancesError('Tempo limite ao carregar conexões')
+            return
+          }
+          if (!response.ok) {
+            console.error('Erro ao carregar conexões:', await response.text().catch(() => response.status))
+            setLastInstancesError('Erro ao carregar conexões')
+            return
+          }
+          const data = await response.json()
+          persistInstances(data.connections || [])
+          setLastInstancesError(null)
+        } else {
+          console.error('Erro ao sincronizar conexões:', instancesResponse.reason)
+          setLastInstancesError('Erro ao carregar conexões')
+        }
+      }
+
+      await Promise.all([handleAgentsResult(), handleInstancesResult()])
     } catch (error) {
-      console.error('Erro ao carregar instâncias:', error)
+      console.error('Erro ao sincronizar agentes/conexões:', error)
+      setLastAgentsError('Erro ao atualizar agentes')
+      setLastInstancesError('Erro ao carregar conexões')
+    } finally {
+      if (!options.silent && initialAgents.length === 0 && initialInstances.length === 0) {
+        setLoading(false)
+      }
+      setIsRefreshingAgents(false)
+      setIsRefreshingInstances(false)
     }
   }
 
-  const loadAgents = async () => {
-    try {
-      setLoading(true)
-      const response = await fetch(`${baseUrl}/agents`, {
-        headers: getHeaders()
-      })
+  useEffect(() => {
+    if (!accessToken) return
+    loadAgentsAndInstances()
+  }, [accessToken])
 
-      if (response.ok) {
-        const data = await response.json()
-        setAgents(data.agents || [])
+  const loadInstances = async (options: LoadAgentsOptions = {}) => {
+    if (!accessToken) return
+    try {
+      setIsRefreshingInstances(true)
+      const response = await safeFetch(`${baseUrl}/whatsapp/connections`, {
+        headers: getHeaders()
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        setLastInstancesError('Tempo limite ao carregar conexões')
+        return
       }
+
+      if (!response.ok) {
+        console.error('Erro ao carregar conexões:', await response.text().catch(() => response.status))
+        setLastInstancesError('Erro ao carregar conexões')
+        return
+      }
+
+      const data = await response.json()
+      persistInstances(data.connections || [])
+      setLastInstancesError(null)
+    } catch (error) {
+      console.error('Erro ao carregar conexões:', error)
+      setLastInstancesError('Erro ao carregar conexões')
+    } finally {
+      if (!options.silent && agents.length === 0 && instances.length === 0) {
+        setLoading(false)
+      }
+      setIsRefreshingInstances(false)
+    }
+  }
+
+  const loadAgents = async (options: LoadAgentsOptions = {}) => {
+    if (!accessToken) return
+    try {
+      setIsRefreshingAgents(true)
+      const response = await safeFetch(`${baseUrl}/agents`, {
+        headers: getHeaders()
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        setLastAgentsError('Tempo limite ao atualizar agentes')
+        return
+      }
+
+      if (!response.ok) {
+        console.error('Erro ao atualizar agentes:', await response.text().catch(() => response.status))
+        setLastAgentsError('Erro ao atualizar agentes')
+        return
+      }
+
+      const data = await response.json()
+      const agentsList = data.agents || []
+      persistAgents(agentsList)
+      setLastAgentsError(null)
     } catch (error) {
       console.error('Error loading agents:', error)
-      toast.error('Erro ao carregar agentes')
+      setLastAgentsError('Erro ao carregar agentes')
     } finally {
-      setLoading(false)
+      if (!options.silent) {
+        setLoading(false)
+      }
+      setIsRefreshingAgents(false)
     }
   }
 
@@ -217,7 +403,8 @@ export function Agents() {
       sobre_empresa: false,
       sobre_produto: false,
       planos_precos: false,
-      como_funciona: false
+      como_funciona: false,
+      informacoes_adicionais: false
     })
   }
 
@@ -245,7 +432,7 @@ export function Agents() {
     if (!validateForm()) return
 
     try {
-      const response = await fetch(`${baseUrl}/agents`, {
+      const response = await safeFetch(`${baseUrl}/agents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -256,43 +443,33 @@ export function Agents() {
           data: formData,
           status: 'draft'
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        const createdAgent = await response.json()
-        
-        // 🔥 NOVO: Se conexao_whatsapp foi preenchida, vincular ao agente criado
-        if (formData.conexao_whatsapp && createdAgent.agent?.id) {
-          try {
-            const assignResponse = await fetch(
-              `${baseUrl}/agents/${createdAgent.agent.id}/assign-instance`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${accessToken}`
-                },
-                body: JSON.stringify({
-                  instance_name: formData.conexao_whatsapp
-                })
-              }
-            )
-            
-            if (assignResponse.ok) {
-              console.log('✅ Novo agente vinculado à instância WhatsApp')
-            }
-          } catch (assignError) {
-            console.error('⚠️ Erro ao vincular novo agente:', assignError)
-          }
-        }
-
-        await loadAgents()
-        setCreatingNewAgent(false)
-        resetForm()
-        toast.success('Agente criado!')
-      } else {
-        toast.error('Erro ao criar agente')
+      if (!response) {
+        setLastAgentsError('Tempo limite ao criar agente')
+        toast.error('Tempo limite ao criar agente')
+        return
       }
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}))
+        const message = errorPayload?.message || 'Erro ao criar agente'
+        setLastAgentsError(message)
+        toast.error(message)
+        return
+      }
+
+      const createdAgent = await response.json()
+
+      if (formData.conexao_whatsapp && createdAgent.agent?.id) {
+        await assignAgentInstance(createdAgent.agent.id, formData.conexao_whatsapp)
+      }
+
+      await loadAgents({ silent: true })
+      setCreatingNewAgent(false)
+      resetForm()
+      setLastAgentsError(null)
+      toast.success('Agente criado!')
     } catch (error) {
       console.error('Error creating agent:', error)
       toast.error('Erro ao criar agente')
@@ -303,19 +480,28 @@ export function Agents() {
     if (!confirm('Tem certeza que deseja excluir este agente?')) return
 
     try {
-      const response = await fetch(`${baseUrl}/agents/${id}`, {
+      const response = await safeFetch(`${baseUrl}/agents/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        await loadAgents()
-        toast.success('Agente excluído!')
-      } else {
-        toast.error('Erro ao excluir agente')
+      if (!response) {
+        setLastAgentsError('Tempo limite ao excluir agente')
+        toast.error('Tempo limite ao excluir agente')
+        return
       }
+
+      if (!response.ok) {
+        setLastAgentsError('Erro ao excluir agente')
+        toast.error('Erro ao excluir agente')
+        return
+      }
+
+      await loadAgents({ silent: true })
+      setLastAgentsError(null)
+      toast.success('Agente excluído!')
     } catch (error) {
       console.error('Error deleting agent:', error)
       toast.error('Erro ao excluir agente')
@@ -326,7 +512,7 @@ export function Agents() {
     const newStatus = agent.status === 'active' ? 'paused' : 'active'
 
     try {
-      const response = await fetch(`${baseUrl}/agents/${agent.id}`, {
+      const response = await safeFetch(`${baseUrl}/agents/${agent.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -335,14 +521,23 @@ export function Agents() {
         body: JSON.stringify({
           status: newStatus
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        await loadAgents()
-        toast.success(`Agente ${newStatus === 'active' ? 'ativado' : 'pausado'}!`)
-      } else {
-        toast.error('Erro ao atualizar status')
+      if (!response) {
+        setLastAgentsError('Tempo limite ao atualizar status do agente')
+        toast.error('Tempo limite ao atualizar status')
+        return
       }
+
+      if (!response.ok) {
+        setLastAgentsError('Erro ao atualizar status')
+        toast.error('Erro ao atualizar status')
+        return
+      }
+
+      await loadAgents({ silent: true })
+      setLastAgentsError(null)
+      toast.success(`Agente ${newStatus === 'active' ? 'ativado' : 'pausado'}!`)
     } catch (error) {
       console.error('Error updating agent status:', error)
       toast.error('Erro ao atualizar status')
@@ -352,7 +547,7 @@ export function Agents() {
   const duplicateAgent = async (agent: Agent) => {
     try {
       const newData = { ...agent.data, nome_agente_pnh: `${agent.data.nome_agente_pnh} (Cópia)` }
-      const response = await fetch(`${baseUrl}/agents`, {
+      const response = await safeFetch(`${baseUrl}/agents`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -363,14 +558,23 @@ export function Agents() {
           data: newData,
           status: 'draft'
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        await loadAgents()
-        toast.success('Agente duplicado!')
-      } else {
-        toast.error('Erro ao duplicar agente')
+      if (!response) {
+        setLastAgentsError('Tempo limite ao duplicar agente')
+        toast.error('Tempo limite ao duplicar agente')
+        return
       }
+
+      if (!response.ok) {
+        setLastAgentsError('Erro ao duplicar agente')
+        toast.error('Erro ao duplicar agente')
+        return
+      }
+
+      await loadAgents({ silent: true })
+      setLastAgentsError(null)
+      toast.success('Agente duplicado!')
     } catch (error) {
       console.error('Error duplicating agent:', error)
       toast.error('Erro ao duplicar agente')
@@ -379,10 +583,7 @@ export function Agents() {
 
   const openEditDialog = (agent: Agent) => {
     setSelectedAgent(agent)
-    loadInstances()
-    
-    console.log('🔍 DEBUG: Abrindo agente para edição', agent)
-    console.log('🔍 DEBUG: Dados do agente:', agent.data)
+    loadInstances({ silent: true })
     
     // Criar um sanitizer de dados para garantir que nenhum valor seja null/undefined
     const sanitizeData = (data: any): AgentFormData => {
@@ -418,28 +619,39 @@ export function Agents() {
         atendimento_conducao: data?.atendimento_conducao ?? "",
         atendimento_frases_sugeridas: data?.atendimento_frases_sugeridas ?? "",
         atendimento_evitar: data?.atendimento_evitar ?? "",
-        atendimento_resposta_padrao_fora_escopo: data?.atendimento_resposta_padrao_fora_escopo ?? ""
+        atendimento_resposta_padrao_fora_escopo: data?.atendimento_resposta_padrao_fora_escopo ?? "",
+        informacoes_adicionais: data?.informacoes_adicionais ?? ""
       }
     }
     
     const mergedData = sanitizeData(agent.data)
     setFormData(mergedData)
     setEditingAgent(true)
-    console.log('Opening agent for editing:', mergedData)
   }
 
   const updateAgent = async () => {
+    console.log('🔍 DEBUG: updateAgent called')
+    console.log('🔍 DEBUG: selectedAgent:', selectedAgent)
+    console.log('🔍 DEBUG: formData.informacoes_adicionais length:', formData.informacoes_adicionais.length)
+
     if (!selectedAgent) {
+      console.log('🔍 DEBUG: No selectedAgent')
       toast.error('Nenhum agente selecionado')
       return
     }
 
-    if (!validateForm()) return
+    if (!validateForm()) {
+      console.log('🔍 DEBUG: validateForm failed')
+      return
+    }
 
     if (!accessToken) {
+      console.log('🔍 DEBUG: No accessToken')
       toast.error('Token não encontrado. Faça login novamente.')
       return
     }
+
+    console.log('🔍 DEBUG: Starting update process')
 
     try {
       // Sanitizar dados antes de enviar (converter null para "")
@@ -467,10 +679,14 @@ export function Agents() {
         atendimento_conducao: formData.atendimento_conducao || "",
         atendimento_frases_sugeridas: formData.atendimento_frases_sugeridas || "",
         atendimento_evitar: formData.atendimento_evitar || "",
-        atendimento_resposta_padrao_fora_escopo: formData.atendimento_resposta_padrao_fora_escopo || ""
+        atendimento_resposta_padrao_fora_escopo: formData.atendimento_resposta_padrao_fora_escopo || "",
+        informacoes_adicionais: formData.informacoes_adicionais || ""
       }
 
-      const response = await fetch(`${baseUrl}/agents/${selectedAgent.id}`, {
+      console.log('🔍 DEBUG: sanitizedData.informacoes_adicionais length:', sanitizedData.informacoes_adicionais.length)
+      console.log('🔍 DEBUG: Making fetch request to:', `${baseUrl}/agents/${selectedAgent.id}`)
+
+      const response = await safeFetch(`${baseUrl}/agents/${selectedAgent.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -480,46 +696,43 @@ export function Agents() {
           name: sanitizedData.nome_agente_pnh,
           data: sanitizedData
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        // 🔥 NOVO: Se conexao_whatsapp foi preenchida, vincular ao agente
-        if (sanitizedData.conexao_whatsapp) {
-          try {
-            const assignResponse = await fetch(
-              `${baseUrl}/agents/${selectedAgent.id}/assign-instance`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${accessToken}`
-                },
-                body: JSON.stringify({
-                  instance_name: sanitizedData.conexao_whatsapp
-                })
-              }
-            )
-            
-            if (assignResponse.ok) {
-              console.log('✅ Agente vinculado à instância WhatsApp')
-            } else {
-              console.warn('⚠️ Erro ao vincular agente à instância')
-            }
-          } catch (assignError) {
-            console.error('❌ Erro ao vincular agente:', assignError)
-          }
-        }
+      console.log('🔍 DEBUG: Fetch response received:', response)
 
-        await loadAgents()
-        setEditingAgent(false)
-        resetForm()
-        toast.success('Agente atualizado com sucesso!')
-        console.log('✅ Agent updated successfully')
-      } else {
+      if (!response) {
+        console.log('🔍 DEBUG: No response from server')
+        setLastAgentsError('Tempo limite ao atualizar agente')
+        toast.error('Tempo limite ao atualizar agente')
+        return
+      }
+
+      if (!response.ok) {
+        console.log('🔍 DEBUG: Response not ok:', response.status, response.statusText)
         const errorData = await response.json().catch(() => ({}))
         console.error('Update error response:', errorData)
-        toast.error(errorData?.message || errorData?.error || 'Erro ao atualizar agente')
+        const message = errorData?.message || errorData?.error || 'Erro ao atualizar agente'
+        setLastAgentsError(message)
+        toast.error(message)
+        return
       }
+
+      console.log('🔍 DEBUG: Response ok, parsing JSON')
+      const result = await response.json()
+      console.log('🔍 DEBUG: Update result:', result)
+
+      if (sanitizedData.conexao_whatsapp) {
+        console.log('🔍 DEBUG: Assigning WhatsApp instance')
+        await assignAgentInstance(selectedAgent.id, sanitizedData.conexao_whatsapp)
+      }
+
+      console.log('🔍 DEBUG: Reloading agents')
+      await loadAgents({ silent: true })
+      setEditingAgent(false)
+      resetForm()
+      setLastAgentsError(null)
+      toast.success('Agente atualizado com sucesso!')
+      console.log('✅ Agent updated successfully')
     } catch (error) {
       console.error('Error updating agent:', error)
       toast.error(`Erro ao atualizar agente: ${(error as Error).message}`)
@@ -544,15 +757,10 @@ export function Agents() {
     }
   }
 
-  const totalUsage = agents.reduce((sum, a) => sum + a.usageCount, 0)
+  const totalUsage = agents.reduce((sum, a) => sum + (a.usageCount ?? 0), 0)
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    )
-  }
+  const isRefreshingAnything = isRefreshingAgents || isRefreshingInstances
+  const showStatusInfo = loading || isRefreshingAnything || lastAgentsSync || lastAgentsError || lastInstancesSync || lastInstancesError
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 p-3 sm:p-4 md:p-6">
@@ -561,21 +769,80 @@ export function Agents() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
+            {showStatusInfo && (
+              <div className="flex items-center gap-3 text-xs text-muted-foreground mb-1 flex-wrap">
+                {loading && !isRefreshingAnything && (
+                  <span className="flex items-center gap-1 text-blue-600">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Preparando agentes...
+                  </span>
+                )}
+                {isRefreshingAgents && (
+                  <span className="flex items-center gap-1 text-blue-600">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Atualizando agentes...
+                  </span>
+                )}
+                {isRefreshingInstances && (
+                  <span className="flex items-center gap-1 text-blue-600">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Atualizando conexões...
+                  </span>
+                )}
+                {lastAgentsSync && <span>Agentes sincronizados: {lastAgentsSync}</span>}
+                {lastInstancesSync && <span>Conexões sincronizadas: {lastInstancesSync}</span>}
+                {lastAgentsError && (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <AlertCircle className="w-3 h-3" />
+                    {lastAgentsError}
+                  </span>
+                )}
+                {lastInstancesError && (
+                  <span className="flex items-center gap-1 text-amber-600">
+                    <AlertCircle className="w-3 h-3" />
+                    {lastInstancesError}
+                  </span>
+                )}
+              </div>
+            )}
             <h1 className="text-2xl sm:text-3xl mb-1 sm:mb-2">Agentes PNH (Pessoas Não Humanas)</h1>
             <p className="text-sm sm:text-base text-muted-foreground">
               Configure agentes de IA personalizados para seus atendimentos
             </p>
           </div>
 
-          {!creatingNewAgent && (
-            <Button className="gap-2" onClick={() => {
-              resetForm()
-              setCreatingNewAgent(true)
-            }}>
-              <Plus className="w-4 h-4" />
-              Novo Agente
+          <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() => {
+                loadAgentsAndInstances({ silent: true })
+              }}
+              disabled={isRefreshingAnything}
+            >
+              {isRefreshingAnything ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Atualizando
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Atualizar
+                </>
+              )}
             </Button>
-          )}
+
+            {!creatingNewAgent && (
+              <Button className="gap-2" onClick={() => {
+                resetForm()
+                setCreatingNewAgent(true)
+              }}>
+                <Plus className="w-4 h-4" />
+                Novo Agente
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* New Agent Form */}
@@ -647,6 +914,26 @@ export function Agents() {
                           )}
                         </select>
                       </div>
+                      {lastInstancesError && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                          <AlertCircle className="w-4 h-4" />
+                          <span>{lastInstancesError}</span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 px-2"
+                            onClick={() => loadInstances({ silent: true })}
+                            disabled={isRefreshingInstances}
+                          >
+                            Tentar novamente
+                          </Button>
+                        </div>
+                      )}
+                      {lastInstancesSync && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Última atualização das conexões: {lastInstancesSync}
+                        </p>
+                      )}
                       <p className="text-xs text-slate-500">Escolha qual conexão WhatsApp este agente utilizará</p>
                     </div>
                     <Separator />
@@ -1069,6 +1356,43 @@ export function Agents() {
                 )}
               </div>
 
+              {/* 6. INFORMAÇÕES ADICIONAIS */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('informacoes_adicionais')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">6. INFORMAÇÕES ADICIONAIS</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.informacoes_adicionais ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.informacoes_adicionais && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="informacoes_adicionais">
+                        6.1 Informações adicionais (opcional)
+                      </Label>
+                      <Textarea
+                        id="informacoes_adicionais"
+                        placeholder="Adicione aqui qualquer informação adicional que o agente deve conhecer e usar durante as conversas. Por exemplo: promoções especiais, políticas específicas, informações sobre a equipe, etc."
+                        value={formData.informacoes_adicionais}
+                        onChange={(e) => handleFormChange('informacoes_adicionais', e.target.value)}
+                        rows={6}
+                        maxLength={5000}
+                        className="border border-slate-300"
+                      />
+                      <p className={`text-xs ${formData.informacoes_adicionais.length > 5000 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                        {formData.informacoes_adicionais.length > 5000
+                          ? `${formData.informacoes_adicionais.length}/5000 - reduza ${formData.informacoes_adicionais.length - 5000} caracteres`
+                          : `${formData.informacoes_adicionais.length}/5000 caracteres`
+                        }
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Separator className="my-6" />
 
               <div className="flex gap-3">
@@ -1091,8 +1415,8 @@ export function Agents() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
-            <CardContent className="p-4 sm:p-6">
+          <Card className="h-full">
+            <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total de Agentes</p>
@@ -1103,8 +1427,8 @@ export function Agents() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
+          <Card className="h-full">
+            <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Agentes Ativos</p>
@@ -1117,8 +1441,8 @@ export function Agents() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
+          <Card className="h-full">
+            <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total de Usos</p>
@@ -1129,8 +1453,8 @@ export function Agents() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardContent className="p-4 sm:p-6">
+          <Card className="h-full">
+            <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Em Rascunho</p>
@@ -1692,6 +2016,43 @@ export function Agents() {
                         rows={2}
                         className="border border-slate-300"
                       />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 6. INFORMAÇÕES ADICIONAIS */}
+              <div className="border border-slate-300 rounded-lg">
+                <button
+                  onClick={() => toggleSection('informacoes_adicionais')}
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50"
+                >
+                  <h3 className="font-semibold text-lg">6. INFORMAÇÕES ADICIONAIS</h3>
+                  <ChevronDown
+                    className={`w-5 h-5 transition-transform ${expandedSections.informacoes_adicionais ? 'rotate-180' : ''}`}
+                  />
+                </button>
+                {expandedSections.informacoes_adicionais && (
+                  <div className="p-4 space-y-4 border-t bg-white">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-informacoes_adicionais">
+                        6.1 Informações adicionais (opcional)
+                      </Label>
+                      <Textarea
+                        id="edit-informacoes_adicionais"
+                        placeholder="Adicione aqui qualquer informação adicional que o agente deve conhecer e usar durante as conversas. Por exemplo: promoções especiais, políticas específicas, informações sobre a equipe, etc."
+                        value={formData.informacoes_adicionais}
+                        onChange={(e) => handleFormChange('informacoes_adicionais', e.target.value)}
+                        rows={6}
+                        maxLength={5000}
+                        className="border border-slate-300"
+                      />
+                      <p className={`text-xs ${formData.informacoes_adicionais.length > 5000 ? 'text-red-600 font-medium' : 'text-muted-foreground'}`}>
+                        {formData.informacoes_adicionais.length > 5000
+                          ? `${formData.informacoes_adicionais.length}/5000 - reduza ${formData.informacoes_adicionais.length - 5000} caracteres`
+                          : `${formData.informacoes_adicionais.length}/5000 caracteres`
+                        }
+                      </p>
                     </div>
                   </div>
                 )}

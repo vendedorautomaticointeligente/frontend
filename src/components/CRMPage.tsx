@@ -11,12 +11,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { Separator } from "./ui/separator"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
+import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
 import { EmptyState } from "./EmptyState"
 import { LoadingState } from "./LoadingState"
 import { StatsCard } from "./StatsCard"
 import { LeadDetailPage } from "./LeadDetailPage"
 import { ProductsManager } from "./ProductsManager"
 import { formatCurrency } from "../utils/formatters"
+import { getApiUrl } from '../utils/apiConfig'
 import { 
   Users, 
   Plus, 
@@ -39,8 +41,41 @@ import {
   Loader2,
   UserPlus,
   Eye,
-  TrendingUp
+  TrendingUp,
+  RefreshCw
 } from "lucide-react"
+
+const CRM_LEADS_CACHE_KEY = "crm_leads_cache"
+const CRM_LEADS_META_KEY = "crm_leads_cache_meta"
+
+// Helper function to calculate total value from lead products
+const calculateLeadValue = (lead: any): number => {
+  return lead.products?.reduce((sum: number, product: any) => sum + (parseFloat(product.price) || 0), 0) || 0
+}
+
+const getInitialLeads = (): Lead[] => {
+  if (typeof window === "undefined") return []
+  try {
+    const cached = localStorage.getItem(CRM_LEADS_CACHE_KEY)
+    return cached ? JSON.parse(cached) : []
+  } catch (error) {
+    console.warn("Erro ao ler cache de leads", error)
+    return []
+  }
+}
+
+const getInitialLastSync = (): string | null => {
+  if (typeof window === "undefined") return null
+  try {
+    const metaRaw = localStorage.getItem(CRM_LEADS_META_KEY)
+    if (!metaRaw) return null
+    const meta = JSON.parse(metaRaw)
+    return meta?.lastSync ? new Date(meta.lastSync).toLocaleTimeString() : null
+  } catch (error) {
+    console.warn("Erro ao ler meta de leads", error)
+    return null
+  }
+}
 
 interface Lead {
   id: string
@@ -63,12 +98,16 @@ interface Lead {
 
 export function CRMPage() {
   const { accessToken } = useAuth()
-  const [leads, setLeads] = useState<Lead[]>([])
-  const [loading, setLoading] = useState(true)
+  const initialLeads = getInitialLeads()
+  const [leads, setLeads] = useState<Lead[]>(initialLeads)
+  const [loading, setLoading] = useState(initialLeads.length === 0)
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null)
   const [showProductsManager, setShowProductsManager] = useState(false)
+  const [retryCount, setRetryCount] = useState(0)
+  const [lastSync, setLastSync] = useState<string | null>(getInitialLastSync())
+  const [lastError, setLastError] = useState<string | null>(null)
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
 
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,
@@ -89,6 +128,7 @@ export function CRMPage() {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('list')
   const [searchTerm, setSearchTerm] = useState("")
   const [showAddLeadDialog, setShowAddLeadDialog] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null)
 
@@ -114,25 +154,66 @@ export function CRMPage() {
   ]
 
   useEffect(() => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
     loadLeads()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
 
-  const loadLeads = async () => {
+  const persistLeads = (leadsList: Lead[]) => {
+    setLeads(leadsList)
     try {
-      setLoading(true)
-      const response = await fetch(`${baseUrl}/crm/leads`, {
-        headers: getHeaders()
-      })
+      localStorage.setItem(CRM_LEADS_CACHE_KEY, JSON.stringify(leadsList))
+      const now = new Date()
+      localStorage.setItem(CRM_LEADS_META_KEY, JSON.stringify({ lastSync: now.toISOString() }))
+      setLastSync(now.toLocaleTimeString())
+    } catch (cacheError) {
+      console.warn('Erro ao salvar cache/meta de leads', cacheError)
+    }
+  }
 
-      if (response.ok) {
-        const data = await response.json()
-        setLeads(data.leads || [])
+  type LoadLeadsOptions = {
+    silent?: boolean
+  }
+
+  const loadLeads = async (options: LoadLeadsOptions = {}) => {
+    if (!accessToken) {
+      setLoading(false)
+      return
+    }
+    try {
+      if (!options.silent && leads.length === 0) {
+        setLoading(true)
       }
+      setIsRefreshing(true)
+      const response = await safeFetch(`${baseUrl}/crm/leads`, {
+        headers: getHeaders()
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        setLastError('Tempo limite ao atualizar leads')
+        return
+      }
+
+      if (!response.ok) {
+        setLastError('Erro ao carregar leads')
+        return
+      }
+
+      const data = await response.json()
+      const leadsList = data.leads || []
+      persistLeads(leadsList)
+      setLastError(null)
     } catch (error) {
       console.error('Error loading leads:', error)
-      toast.error('Erro ao carregar leads')
+      setLastError('Erro ao carregar leads')
     } finally {
-      setLoading(false)
+      if (!options.silent) {
+        setLoading(false)
+      }
+      setIsRefreshing(false)
     }
   }
 
@@ -159,7 +240,7 @@ export function CRMPage() {
 
   const updateLeadStatus = async (leadId: string, newStatus: string) => {
     try {
-      const response = await fetch(`${baseUrl}/crm/leads/${leadId}`, {
+      const response = await safeFetch(`${baseUrl}/crm/leads/${leadId}`, {
         method: 'PUT',
         headers: getHeaders(true),
         body: JSON.stringify({
@@ -168,9 +249,11 @@ export function CRMPage() {
         })
       })
 
-      if (response.ok) {
+      if (response && response.ok) {
         await loadLeads()
         toast.success('Status atualizado!')
+      } else if (!response) {
+        setLastError('Tempo limite ao atualizar status')
       } else {
         toast.error('Erro ao atualizar status')
       }
@@ -184,14 +267,16 @@ export function CRMPage() {
     if (!confirm('Tem certeza que deseja excluir este lead?')) return
 
     try {
-      const response = await fetch(`${baseUrl}/crm/leads/${leadId}`, {
+      const response = await safeFetch(`${baseUrl}/crm/leads/${leadId}`, {
         method: 'DELETE',
         headers: getHeaders()
       })
 
-      if (response.ok) {
+      if (response && response.ok) {
         await loadLeads()
         toast.success('Lead excluído!')
+      } else if (!response) {
+        setLastError('Tempo limite ao excluir lead')
       } else {
         toast.error('Erro ao excluir lead')
       }
@@ -210,7 +295,7 @@ export function CRMPage() {
     setLeadCity(lead.city)
     setLeadState(lead.state)
     setLeadSegment(lead.segment)
-    setLeadValue(lead.value)
+    setLeadValue(calculateLeadValue(lead))
     setLeadSource(lead.source)
     setLeadNotes(lead.notes)
     setShowEditDialog(true)
@@ -220,7 +305,7 @@ export function CRMPage() {
     if (!selectedLead) return
 
     try {
-      const response = await fetch(`${baseUrl}/crm/leads/${selectedLead.id}`, {
+      const response = await safeFetch(`${baseUrl}/crm/leads/${selectedLead.id}`, {
         method: 'PUT',
         headers: getHeaders(true),
         body: JSON.stringify({
@@ -258,7 +343,7 @@ export function CRMPage() {
     }
 
     try {
-      const response = await fetch(`${baseUrl}/crm/leads`, {
+      const response = await safeFetch(`${baseUrl}/crm/leads`, {
         method: 'POST',
         headers: getHeaders(true),
         body: JSON.stringify({
@@ -306,7 +391,7 @@ export function CRMPage() {
     setSelectedLead(null)
   }
 
-  if (loading) {
+  if (loading && leads.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
@@ -330,7 +415,7 @@ export function CRMPage() {
   return (
     <div className="h-full overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
-        
+
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
@@ -338,6 +423,10 @@ export function CRMPage() {
             <p className="text-muted-foreground">
               Gerencie seus leads e oportunidades
             </p>
+            <div className="text-xs text-muted-foreground mt-1 space-x-2">
+              {lastSync && <span>Última atualização: {lastSync}</span>}
+              {lastError && <span className="text-amber-600">{lastError}</span>}
+            </div>
           </div>
           
           <div className="flex items-center gap-2">
@@ -367,6 +456,16 @@ export function CRMPage() {
                 Lista
               </Button>
             </div>
+            
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => loadLeads({ silent: true })}
+              disabled={isRefreshing}
+              title="Recarregar"
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
             
             <Dialog open={showAddLeadDialog} onOpenChange={setShowAddLeadDialog}>
               <DialogTrigger asChild>
@@ -526,7 +625,7 @@ export function CRMPage() {
         {/* Pipeline Box */}
         {(() => {
           const openLeads = filteredLeads.filter(l => !['won', 'lost'].includes(l.status))
-          const totalValue = openLeads.reduce((sum, lead) => sum + (lead.value || 0), 0)
+          const totalValue = openLeads.reduce((sum, lead) => sum + calculateLeadValue(lead), 0)
           
           return (
             <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200">
@@ -646,10 +745,30 @@ export function CRMPage() {
                                 </a>
                               </div>
                             )}
-                            {lead.value > 0 && (
-                              <div className="flex items-center gap-2 text-green-600 font-medium">
-                                <DollarSign className="w-3 h-3" />
-                                <span>{formatCurrency(lead.value)}</span>
+                            {(() => {
+                              const productsValue = calculateLeadValue(lead)
+                              return productsValue > 0 && (
+                                <div className="flex items-center gap-2 text-green-600 font-medium">
+                                  <DollarSign className="w-3 h-3" />
+                                  <span>{formatCurrency(productsValue)}</span>
+                                </div>
+                              )
+                            })()}
+                            {lead.products && lead.products.length > 0 && (
+                              <div className="flex items-start gap-2 text-muted-foreground">
+                                <Target className="w-3 h-3 mt-0.5" />
+                                <div className="flex flex-wrap gap-1">
+                                  {lead.products.slice(0, 2).map((product: any) => (
+                                    <Badge key={product.id} variant="outline" className="text-xs px-1 py-0">
+                                      {product.name}
+                                    </Badge>
+                                  ))}
+                                  {lead.products.length > 2 && (
+                                    <Badge variant="outline" className="text-xs px-1 py-0">
+                                      +{lead.products.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
                               </div>
                             )}
                           </div>
@@ -693,6 +812,7 @@ export function CRMPage() {
                       <th className="text-left p-3 font-medium">Empresa</th>
                       <th className="text-left p-3 font-medium">Email</th>
                       <th className="text-left p-3 font-medium">Telefone</th>
+                      <th className="text-left p-3 font-medium">Produtos</th>
                       <th className="text-left p-3 font-medium">Status</th>
                       <th className="text-left p-3 font-medium">Valor</th>
                       <th className="text-right p-3 font-medium">Ações</th>
@@ -701,7 +821,7 @@ export function CRMPage() {
                   <tbody>
                     {filteredLeads.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center p-8 text-muted-foreground">
+                        <td colSpan={8} className="text-center p-8 text-muted-foreground">
                           Nenhum lead encontrado. Adicione um novo lead para começar.
                         </td>
                       </tr>
@@ -728,13 +848,34 @@ export function CRMPage() {
                                 '-'
                               )}
                             </td>
+                            <td className="p-3 text-sm">
+                              {lead.products && lead.products.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {lead.products.slice(0, 2).map((product: any) => (
+                                    <Badge key={product.id} variant="outline" className="text-xs">
+                                      {product.name}
+                                    </Badge>
+                                  ))}
+                                  {lead.products.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{lead.products.length - 2}
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">-</span>
+                              )}
+                            </td>
                             <td className="p-3">
                               <Badge className={statusInfo.color}>
                                 {statusInfo.label}
                               </Badge>
                             </td>
                             <td className="p-3 font-medium text-green-600">
-                              {lead.value > 0 ? formatCurrency(lead.value) : '-'}
+                              {(() => {
+                                const productsValue = calculateLeadValue(lead)
+                                return productsValue > 0 ? formatCurrency(productsValue) : '-'
+                              })()}
                             </td>
                             <td className="p-3">
                               <div className="flex items-center justify-end gap-2">

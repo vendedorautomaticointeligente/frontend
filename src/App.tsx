@@ -7,10 +7,12 @@ import { ListGeneratorB2C } from "./components/ListGeneratorB2C"
 import { CRMPage } from "./components/CRMPage"
 import { Agents } from "./components/Agents"
 import { CampaignsPage } from "./components/CampaignsPage"
+import { CreateCampaignPage } from "./components/CreateCampaignPage"
+import { CampaignStatsPage } from "./components/campaigns/CampaignStatsPage"
 import { Automations } from "./components/Automations"
 import { AccountSettings } from "./components/AccountSettings"
 import { Integrations } from "./components/Integrations"
-import { ConversationsPage } from "./components/ConversationsPage"
+import { ConversationsPage } from "./components/ConversationsPage_v2_simplified"
 import { PlansPage } from "./components/PlansPage"
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar"
 import { Button } from "./components/ui/button"
@@ -19,7 +21,7 @@ import { Badge } from "./components/ui/badge"
 import { Zap, List, Users, Bot, Megaphone, Settings2, User, Crown, LogOut, Loader2, Shield, Building2, UserCircle, Plug, MessageCircle, CreditCard } from "lucide-react"
 import { Toaster } from "./components/ui/sonner"
 
-type ActiveSection = 'listsB2B' | 'listsB2C' | 'crm' | 'conversations' | 'agents' | 'campaigns' | 'automations' | 'plans' | 'integrations' | 'account' | 'admin'
+type ActiveSection = 'listsB2B' | 'listsB2C' | 'crm' | 'conversations' | 'agents' | 'campaigns' | 'create-campaign' | 'campaign-stats' | 'automations' | 'plans' | 'integrations' | 'account' | 'admin'
 
 function MainApp() {
   const { user, signOut, loading, isAdmin } = useAuth()
@@ -28,6 +30,36 @@ function MainApp() {
     const savedSection = localStorage.getItem('vai_active_section') as ActiveSection | null
     return savedSection || 'crm'
   })
+  const [selectedCampaignId, setSelectedCampaignId] = useState<string | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+
+  // Handler para logout que aguarda a promise
+  const handleLogout = async () => {
+    try {
+      setIsLoggingOut(true)
+      // 🔥 Logout instantâneo - não aguardar resposta do servidor
+      await signOut()
+      // Redirecionar imediatamente
+      window.location.href = '/'
+    } catch (error) {
+      console.error('❌ Erro ao fazer logout:', error)
+      // Mesmo com erro, redireciona imediatamente
+      window.location.href = '/'
+    }
+  }
+
+  // Debug: mostrar estado de loading
+  useEffect(() => {
+    console.log('🔄 MainApp state:', { loading, userExists: !!user, userEmail: user?.email })
+  }, [loading, user])
+
+  // 🔥 Fechar SSE quando usuário faz logout
+  useEffect(() => {
+    if (!user && isLoggingOut) {
+      // Enviar mensagem para ConversationsPage fechar SSE
+      window.dispatchEvent(new CustomEvent('logout-user'))
+    }
+  }, [user, isLoggingOut])
 
   // Salvar seção no localStorage sempre que mudar
   useEffect(() => {
@@ -40,6 +72,7 @@ function MainApp() {
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-vai-blue-tech" />
           <p className="text-vai-text-secondary">Carregando VAI...</p>
+          <p className="text-xs text-gray-400 mt-2">Verificando sua sessão...</p>
         </div>
       </div>
     )
@@ -125,7 +158,21 @@ function MainApp() {
       case 'agents':
         return <Agents />
       case 'campaigns':
-        return <CampaignsPage />
+        return <CampaignsPage 
+          onCreateCampaign={() => setActiveSection('create-campaign')} 
+          onEditCampaign={() => setActiveSection('create-campaign')}
+          onViewStats={(campaignId) => {
+            setSelectedCampaignId(campaignId)
+            setActiveSection('campaign-stats')
+          }}
+        />
+      case 'create-campaign':
+        return <CreateCampaignPage onBack={() => setActiveSection('campaigns')} />
+      case 'campaign-stats':
+        return <CampaignStatsPage 
+          campaignId={selectedCampaignId!} 
+          onBack={() => setActiveSection('campaigns')} 
+        />
       case 'automations':
         return <Automations />
       case 'plans':
@@ -218,7 +265,8 @@ function MainApp() {
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={signOut}
+                onClick={handleLogout}
+                disabled={isLoggingOut}
                 className="p-2"
               >
                 <LogOut className="w-4 h-4" />
@@ -263,7 +311,8 @@ function MainApp() {
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={signOut}
+                onClick={handleLogout}
+                disabled={isLoggingOut}
                 className="p-2 sm:hidden"
               >
                 <LogOut className="w-4 h-4" />

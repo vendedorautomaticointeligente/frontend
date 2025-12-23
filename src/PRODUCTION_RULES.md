@@ -148,7 +148,7 @@ const availableAgents: { id: string; name: string; style: string }[] = []
 ### 6. Configuração de APIs (Admin)
 
 **Armazenamento:**
-- Chaves salvas no Supabase: tabela `kv_store_73685931`
+- Chaves salvas no Backend SQLite/PostgreSQL: tabela `kv_store_73685931`
 - Keys: `openai_api_key` e `hasdata_api_key`
 - Backup em localStorage para modo offline
 
@@ -165,7 +165,7 @@ const availableAgents: { id: string; name: string; style: string }[] = []
 3. Sistema busca dados REAIS via HasData API
 4. Se encontrar dados → adiciona à lista
 5. Se não encontrar → retorna erro claro (sem fallback)
-6. Lista salva no Supabase com contatos reais
+6. Lista salva no Backend SQLite/PostgreSQL com contatos reais
 
 **Delays e Rate Limiting:**
 - 2 segundos entre requisições de cidades diferentes

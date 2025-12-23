@@ -6,21 +6,22 @@
  * Formata um número para o padrão de moeda brasileira (R$)
  * @param value - Número a ser formatado
  * @param showCurrency - Se deve incluir o símbolo de moeda (padrão: true)
- * @returns String formatada como "R$ 1.234,56"
+ * @returns String formatada como "R$0.000,00"
  */
 export function formatCurrency(value: number | string, showCurrency: boolean = true): string {
   const numValue = typeof value === 'string' ? parseFloat(value) : value
 
   if (isNaN(numValue)) {
-    return showCurrency ? 'R$ 0,00' : '0,00'
+    return showCurrency ? 'R$0,00' : '0,00'
   }
 
   const formatted = numValue.toLocaleString('pt-BR', {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
+    useGrouping: true // Mantém separador de milhares
   })
 
-  return showCurrency ? `R$ ${formatted}` : formatted
+  return showCurrency ? `R$${formatted}` : formatted
 }
 
 /**

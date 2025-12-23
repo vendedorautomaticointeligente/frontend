@@ -40,7 +40,7 @@
   - ✅ Filtros por estado, cidade, nicho
   - ✅ Visualização de contatos
   - ✅ Exclusão de listas
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 2. ✅ Listas B2C
 - **Status**: 100% Funcional
@@ -58,7 +58,7 @@
   - ✅ Filtros por plataforma, categoria, localização
   - ✅ Visualização de contatos
   - ✅ Exclusão de listas
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 3. ✅ CRM
 - **Status**: 100% Funcional
@@ -77,7 +77,7 @@
   - ✅ Exclusão de leads
   - ✅ Busca por nome/empresa/email/telefone
   - ✅ Drag-and-drop entre status
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 4. ✅ Agentes
 - **Status**: 100% Funcional
@@ -96,7 +96,7 @@
   - ✅ Ativar/Pausar agentes
   - ✅ Duplicar agentes
   - ✅ Exclusão de agentes
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 5. ✅ Campanhas
 - **Status**: 100% Funcional
@@ -116,7 +116,7 @@
   - ✅ Métricas (enviadas, entregues, abertas, respostas)
   - ✅ Play/Pause de campanhas
   - ✅ Exclusão de campanhas
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 6. ✅ Automações
 - **Status**: 100% Funcional
@@ -136,7 +136,7 @@
   - ✅ Ativar/Pausar automações
   - ✅ Métricas de execução
   - ✅ Exclusão de automações
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 7. ✅ Integrações
 - **Status**: 100% Funcional
@@ -156,7 +156,7 @@
   - ✅ VOIP (Twilio, Vonage, Plivo, Outros)
   - ✅ Status de conexão
   - ✅ Desconexão de integrações
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ### 8. ⚠️ Minha Conta
 - **Status**: 70% Funcional
@@ -184,7 +184,7 @@
   - ✅ Configuração de API Keys (OpenAI, HasData)
   - ✅ Dashboard com métricas
   - ✅ Gerenciamento de sistema
-  - ✅ Persistência completa no Supabase
+  - ✅ Persistência completa no Backend SQLite/PostgreSQL
 
 ---
 
@@ -251,7 +251,7 @@
 ## 🎯 FUNCIONALIDADES PRONTAS PARA PRODUÇÃO
 
 ### ✅ Sistema de Autenticação
-- Login/Logout com Supabase Auth
+- Login/Logout com Backend SQLite/PostgreSQL Auth
 - Usuário admin pré-configurado
 - Tokens de acesso seguros
 - Separação de dados por usuário
@@ -319,10 +319,10 @@ Todos os dados são isolados por usuário usando prefixos:
 ### Autenticação
 - Bearer tokens em todas as requisições
 - Validação de usuário no backend
-- Supabase Auth para gerenciamento
+- Backend SQLite/PostgreSQL Auth para gerenciamento
 
 ### API Keys
-- Armazenadas no Supabase KV Store
+- Armazenadas no Backend SQLite/PostgreSQL KV Store
 - Nunca expostas no frontend
 - OpenAI e HasData configuráveis
 
@@ -344,7 +344,7 @@ Todos os dados são isolados por usuário usando prefixos:
 **O sistema VAI está 96.67% funcional e pronto para uso em produção!**
 
 Todos os módulos principais estão:
-- ✅ Integrados com Supabase
+- ✅ Integrados com Backend SQLite/PostgreSQL
 - ✅ Persistindo dados corretamente
 - ✅ Com interface moderna e responsiva
 - ✅ Com autenticação segura

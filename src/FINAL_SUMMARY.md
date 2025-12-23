@@ -31,7 +31,7 @@ Resultado: TODOS os componentes iniciam vazios []
 ✅ Responsividade 100% completa
 ✅ Kanban com scroll horizontal
 ✅ Admin Panel com mascaramento de chaves
-✅ Salvamento correto no Supabase
+✅ Salvamento correto no Backend SQLite/PostgreSQL
 ✅ Backup local (localStorage)
 ✅ Feedback visual (toasts)
 ✅ Documentação completa (2.150+ linhas)
@@ -221,7 +221,7 @@ Resultado: TODOS os componentes iniciam vazios []
 
 ### Autenticação
 ```
-Método: Supabase Auth (JWT)
+Método: Backend SQLite/PostgreSQL Auth (JWT)
 Admin: admin@vai.com.br | Admin@VAI2025
 Tokens: Validados em todas as rotas
 Session: Gerenciamento automático
@@ -230,7 +230,7 @@ Session: Gerenciamento automático
 ### Proteção de Dados
 ```
 Chaves de API:
-  ├─ Primário: Supabase (criptografado)
+  ├─ Primário: Backend SQLite/PostgreSQL (criptografado)
   ├─ Backup: localStorage (modo offline)
   ├─ Display: Mascarado (***últimos4)
   └─ Toggle: Show/Hide seguro

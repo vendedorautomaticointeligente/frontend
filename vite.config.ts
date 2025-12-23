@@ -48,7 +48,6 @@ export default defineConfig({
       '@radix-ui/react-aspect-ratio': '@radix-ui/react-aspect-ratio',
       '@radix-ui/react-alert-dialog': '@radix-ui/react-alert-dialog',
       '@radix-ui/react-accordion': '@radix-ui/react-accordion',
-      '@supabase/supabase-js': '@supabase/supabase-js',
       '@hapi/boom': '@hapi/boom',
     },
   },
@@ -58,7 +57,14 @@ export default defineConfig({
     sourcemap: false,
   },
   server: {
+    host: '0.0.0.0',
     port: 3000,
+    strictPort: true,
     open: true,
+    hmr: {
+      protocol: 'ws',
+      host: 'localhost',
+      port: 3000,
+    },
   },
 });

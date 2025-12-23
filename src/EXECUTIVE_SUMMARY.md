@@ -138,14 +138,14 @@ APIS EXTERNAS
 Usuário Admin:
   Email: admin@vai.com.br
   Senha: Admin@VAI2025
-  Método: Supabase Auth (JWT)
+  Método: Backend SQLite/PostgreSQL Auth (JWT)
   Auto-confirmado: Sim
 ```
 
 ### Chaves de API
 ```
 Armazenamento:
-  Primário: Supabase (kv_store_73685931)
+  Primário: Backend SQLite/PostgreSQL (kv_store_73685931)
   Backup: localStorage (modo offline)
   
 Display:

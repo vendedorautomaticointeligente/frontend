@@ -10,7 +10,7 @@ O sistema está configurado corretamente para vincular listas aos usuários.
 ```typescript
 // Frontend: hooks/useAuth.tsx
 - Usuário faz login com email/senha
-- Supabase retorna session.access_token (JWT)
+- Backend SQLite/PostgreSQL retorna session.access_token (JWT)
 - JWT contém o user.id único
 - accessToken é armazenado no estado do React
 ```
@@ -26,13 +26,13 @@ Authorization: `Bearer ${accessToken || publicAnonKey}`
 
 ### 3. Verificação no Servidor
 ```typescript
-// Backend: supabase/functions/server/index.tsx
+// Backend: backend/functions/server/index.tsx
 
 // Extrai o userId do JWT:
-userId = await getAuthenticatedUserId(authHeader, supabase)
+userId = await getAuthenticatedUserId(authHeader, backend)
 
 // Retorna:
-// - user.id REAL do Supabase se JWT válido
+// - user.id REAL do Backend SQLite/PostgreSQL se JWT válido
 // - 'default_user' se usando anon key (não logado)
 ```
 
@@ -116,7 +116,7 @@ await db.set(`user_lists_${userId}`, JSON.stringify(filtered))
 
 ### Segurança
 ✅ Endpoints protegidos exigem Authorization header
-✅ JWT é verificado pelo Supabase Auth
+✅ JWT é verificado pelo Backend SQLite/PostgreSQL Auth
 ✅ userId é extraído do token, não da requisição
 
 ## 📊 Cenários de Uso
@@ -185,7 +185,7 @@ localStorage.getItem('sb-<project>-auth-token')
 💾 Saving 3 lists to database with key: user_lists_550e8400-e29b-41d4-a716-446655440000
 ```
 
-### No Banco Supabase
+### No Banco Backend SQLite/PostgreSQL
 ```sql
 SELECT * FROM kv_store_73685931 
 WHERE key LIKE 'user_lists_%';
@@ -206,5 +206,5 @@ WHERE key LIKE 'user_lists_%';
 **Status**: ✅ CORRIGIDO - código verificado e correto
 
 ### Problema: Listas não salvam
-**Causa**: Erro de autenticação ou Supabase offline
+**Causa**: Erro de autenticação ou Backend SQLite/PostgreSQL offline
 **Debug**: Verificar logs do servidor e Network tab do navegador

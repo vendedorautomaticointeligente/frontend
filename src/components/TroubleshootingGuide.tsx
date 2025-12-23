@@ -137,7 +137,7 @@ export function TroubleshootingGuide({ error }: TroubleshootingGuideProps) {
             Se os problemas persistirem, verifique:
           </p>
           <ul className="text-sm space-y-1 mt-2">
-            <li>• Status do Supabase em status.supabase.com</li>
+            <li>• Status do servidor backend</li>
             <li>• Configurações de rede e firewall</li>
             <li>• Console do navegador (F12) para erros detalhados</li>
           </ul>

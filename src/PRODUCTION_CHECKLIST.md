@@ -43,7 +43,7 @@ Versão: 5.0.0
 
 ### ✅ 3. Armazenamento de Dados
 
-#### Supabase
+#### Backend SQLite/PostgreSQL
 - [x] Tabela: `kv_store_73685931`
 - [x] Chaves de API salvas: `openai_api_key`, `hasdata_api_key`
 - [x] Listas de usuário: `user_lists_{userId}`
@@ -108,7 +108,7 @@ Versão: 5.0.0
 3. [x] Selecionar estado e cidades
 4. [x] Buscar dados reais
 5. [x] Validar e adicionar à lista
-6. [x] Salvar no Supabase
+6. [x] Salvar no Backend SQLite/PostgreSQL
 
 #### CRM
 1. [x] Importar leads de listas
@@ -140,7 +140,7 @@ Versão: 5.0.0
 ### ✅ 7. Segurança
 
 #### Autenticação
-- [x] Supabase Auth configurado
+- [x] Backend SQLite/PostgreSQL Auth configurado
 - [x] Admin user: admin@vai.com.br
 - [x] Password: Admin@VAI2025
 - [x] Email auto-confirmado
@@ -201,7 +201,7 @@ Versão: 5.0.0
 ## 🚀 Pronto para Deploy
 
 ### Pré-requisitos de Deploy
-1. ✅ Supabase project configurado
+1. ✅ Backend SQLite/PostgreSQL project configurado
 2. ✅ Edge Functions deployed
 3. ✅ Tabela `kv_store_73685931` criada
 4. ✅ Admin user criado

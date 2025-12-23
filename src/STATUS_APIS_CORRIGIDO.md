@@ -20,7 +20,7 @@ Corrigir o sistema de geração de listas B2B após migração do HasData para O
 
 #### Depois:
 - ✅ Documentação clara: apenas ADMIN configura
-- ✅ RAPIDAPI_KEY configurada via environment variables do Supabase
+- ✅ RAPIDAPI_KEY configurada via environment variables do Backend SQLite/PostgreSQL
 - ✅ Usuários NÃO precisam se preocupar com APIs
 - ✅ Guia atualizado em `/RAPIDAPI_SETUP.md`
 
@@ -38,8 +38,8 @@ Corrigir o sistema de geração de listas B2B após migração do HasData para O
 ```
 
 #### Arquivos Modificados:
-- `/supabase/functions/server/index.tsx` - Endpoint `/generate-leads`
-- `/supabase/functions/server/api-integrations.tsx` - Função `scrapeGoogleMaps()`
+- `/backend/functions/server/index.tsx` - Endpoint `/generate-leads`
+- `/backend/functions/server/api-integrations.tsx` - Função `scrapeGoogleMaps()`
 
 ### 3. **Source Labels Genéricos**
 
@@ -71,7 +71,7 @@ O sistema agora tenta duas APIs automaticamente:
 
 | Configuração | Onde Configurar | Quem Configura |
 |--------------|-----------------|----------------|
-| **RAPIDAPI_KEY** | Supabase Environment Variables | Admin Sistema |
+| **RAPIDAPI_KEY** | Backend SQLite/PostgreSQL Environment Variables | Admin Sistema |
 | **OPENAI_API_KEY** | Painel Admin do VAI | Admin Sistema |
 | **Uso do Sistema** | Interface VAI | Qualquer Usuário |
 
@@ -82,18 +82,18 @@ O sistema agora tenta duas APIs automaticamente:
 ### 1. `/RAPIDAPI_SETUP.md`
 **Mudanças:**
 - ✅ Título atualizado: "Configuração Exclusiva para Administradores"
-- ✅ Instruções claras sobre configurar via Supabase Environment Variables
+- ✅ Instruções claras sobre configurar via Backend SQLite/PostgreSQL Environment Variables
 - ✅ Removida confusão sobre configuração via painel admin
 - ✅ Seção de segurança adicionada
 
-### 2. `/supabase/functions/server/index.tsx`
+### 2. `/backend/functions/server/index.tsx`
 **Mudanças:**
 - ✅ Mensagens de erro genéricas (linhas 1112-1116, 1154-1166)
 - ✅ Labels de source genéricos (linha 1230)
 - ✅ Mensagem de sucesso genérica (linha 1325)
 - ✅ Tratamento de erros melhorado (linhas 1328-1358)
 
-### 3. `/supabase/functions/server/api-integrations.tsx`
+### 3. `/backend/functions/server/api-integrations.tsx`
 **Mudanças:**
 - ✅ Função `getApiKeys()` melhorada com fallback (linhas 16-93)
 - ✅ Mensagens de erro genéricas (linhas 465-468, 332-337)
@@ -107,7 +107,7 @@ O sistema agora tenta duas APIs automaticamente:
 
 1. **Configurar RapidAPI:**
    ```
-   Supabase Dashboard 
+   Backend SQLite/PostgreSQL Dashboard 
    → Settings 
    → Edge Functions 
    → Environment Variables 
@@ -216,7 +216,7 @@ Os logs técnicos continuam detalhados para diagnóstico, mas apenas no console 
 
 ### Para Administradores:
 - Consulte `/RAPIDAPI_SETUP.md` para configuração
-- Verifique logs do Supabase Edge Functions
+- Verifique logs do Backend SQLite/PostgreSQL Edge Functions
 - Teste APIs direto no RapidAPI para validar chaves
 
 ### Para Usuários:

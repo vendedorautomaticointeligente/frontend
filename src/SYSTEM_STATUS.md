@@ -17,7 +17,7 @@
 └─────────────────────────────────────────────────────────────┘
 
 🎯 Objetivo: SaaS de vendas automatizadas com dados reais
-🔒 Segurança: Autenticação Supabase + JWT
+🔒 Segurança: Autenticação Backend SQLite/PostgreSQL + JWT
 💾 Dados: 100% reais via HasData API
 🤖 IA: OpenAI para estratégias (não dados)
 📱 Responsivo: Mobile-first design
@@ -186,13 +186,13 @@ Função: Configurações globais do sistema
 ```javascript
 Email: admin@vai.com.br
 Password: Admin@VAI2025
-Method: Supabase Auth (JWT)
+Method: Backend SQLite/PostgreSQL Auth (JWT)
 Auto-confirm: true (sem email server)
 ```
 
 ### Chaves de API
 ```javascript
-Storage: Supabase kv_store_73685931
+Storage: Backend SQLite/PostgreSQL kv_store_73685931
 Keys: 
   - openai_api_key
   - hasdata_api_key

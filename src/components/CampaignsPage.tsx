@@ -16,7 +16,8 @@ import {
   CheckCircle,
   Eye,
   Loader2,
-  Edit
+  Edit,
+  BarChart3
 } from "lucide-react"
 
 interface Campaign {
@@ -56,9 +57,10 @@ interface Campaign {
 interface CampaignsPageProps {
   onCreateCampaign?: () => void
   onEditCampaign?: () => void
+  onViewStats?: (campaignId: string) => void
 }
 
-export function CampaignsPage({ onCreateCampaign, onEditCampaign }: CampaignsPageProps = {}) {
+export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }: CampaignsPageProps = {}) {
   const { accessToken } = useAuth()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading] = useState(true)
@@ -166,6 +168,12 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign }: CampaignsPag
     } catch (error) {
       console.error('Error deleting campaign:', error)
       toast.error('Erro ao excluir campanha')
+    }
+  }
+
+  const viewStats = (campaignId: string) => {
+    if (onViewStats) {
+      onViewStats(campaignId)
     }
   }
 
@@ -391,6 +399,15 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign }: CampaignsPag
                         >
                           <Edit className="w-4 h-4 mr-1" />
                           Editar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => viewStats(campaign.id)}
+                          className="text-purple-600"
+                        >
+                          <BarChart3 className="w-4 h-4 mr-1" />
+                          Estatísticas
                         </Button>
                         <Button
                           variant="outline"

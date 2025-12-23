@@ -24,7 +24,7 @@ import {
 } from "lucide-react"
 import { Switch } from "./ui/switch"
 
-export function AccountSettings() {
+function AccountSettingsContent() {
   const { user, isAdmin } = useAuth()
   
   // User info
@@ -398,4 +398,8 @@ export function AccountSettings() {
       </div>
     </div>
   )
+}
+
+export function AccountSettings() {
+  return <AccountSettingsContent />
 }

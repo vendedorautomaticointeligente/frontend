@@ -5,6 +5,7 @@ import { Trash2, Plus, Edit2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '../hooks/useAuthLaravel'
 import { formatCurrency } from '../utils/formatters'
+import { getApiUrl } from '../utils/apiConfig'
 
 interface Product {
   id: number
@@ -34,7 +35,7 @@ export function ProductsManager({ isOpen, onClose, onProductAdded }: ProductsMan
   const [editingId, setEditingId] = useState<number | null>(null)
   const { accessToken } = useAuth()
 
-  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
 
   const getHeaders = (withBody = false) => {
     const headers: Record<string, string> = {

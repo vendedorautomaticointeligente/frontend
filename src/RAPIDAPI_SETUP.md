@@ -45,9 +45,9 @@ O sistema tenta automaticamente 4 APIs diferentes na seguinte ordem:
 3. Obtenha sua API key
 
 #### Passo 2: Configurar no Ambiente
-**IMPORTANTE**: Esta configuração deve ser feita diretamente nas variáveis de ambiente do Supabase.
+**IMPORTANTE**: Esta configuração deve ser feita diretamente nas variáveis de ambiente do Backend SQLite/PostgreSQL.
 
-1. Acesse o painel do Supabase: https://supabase.com/dashboard
+1. Acesse o painel do Backend SQLite/PostgreSQL: https://backend.com/dashboard
 2. Vá em **Settings** > **Edge Functions** > **Environment Variables**
 3. Adicione/edite a variável: `RAPIDAPI_KEY` (sim, use este nome mesmo para HasData)
 4. Cole o valor da sua chave HasData
@@ -72,7 +72,7 @@ O sistema tenta automaticamente 4 APIs diferentes na seguinte ordem:
 3. Ela será algo como: `abc123xyz456def789...`
 
 #### Passo 4: Configurar no Ambiente
-1. Acesse o painel do Supabase: https://supabase.com/dashboard
+1. Acesse o painel do Backend SQLite/PostgreSQL: https://backend.com/dashboard
 2. Vá em **Settings** > **Edge Functions** > **Environment Variables**
 3. Adicione/edite a variável: `RAPIDAPI_KEY`
 4. Cole o valor da sua chave RapidAPI
@@ -142,8 +142,8 @@ Se você tiver problemas:
 
 1. Verifique se copiou a chave corretamente (sem espaços extras)
 2. Confirme que você se inscreveu na API (não apenas criou conta no RapidAPI)
-3. Verifique se a chave foi adicionada nas environment variables do Supabase (não no painel admin)
-4. Verifique o console do navegador e logs do Supabase para mensagens detalhadas
+3. Verifique se a chave foi adicionada nas environment variables do Backend SQLite/PostgreSQL (não no painel admin)
+4. Verifique o console do navegador e logs do Backend SQLite/PostgreSQL para mensagens detalhadas
 5. Tente fazer uma requisição de teste direto no site da API
 
 ---
@@ -158,10 +158,10 @@ O sistema VAI está configurado com fallback automático em 4 APIs:
 - ✅ **Mensagens de erro claras**: Informa exatamente o que está acontecendo
 - ✅ **Configuração centralizada**: Apenas admin configura, usuários apenas usam
 
-Após configurar a chave API nas environment variables do Supabase, o sistema funcionará automaticamente para todos os usuários! 🚀
+Após configurar a chave API nas environment variables do Backend SQLite/PostgreSQL, o sistema funcionará automaticamente para todos os usuários! 🚀
 
 ---
 
 ## 🔐 Segurança
 
-**IMPORTANTE**: As chaves de API são armazenadas de forma segura nas environment variables do Supabase e NUNCA são expostas ao frontend ou aos usuários finais. Apenas o servidor backend tem acesso a elas.
+**IMPORTANTE**: As chaves de API são armazenadas de forma segura nas environment variables do Backend SQLite/PostgreSQL e NUNCA são expostas ao frontend ou aos usuários finais. Apenas o servidor backend tem acesso a elas.

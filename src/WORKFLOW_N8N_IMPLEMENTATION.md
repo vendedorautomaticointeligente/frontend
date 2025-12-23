@@ -11,7 +11,7 @@ Este documento descreve como a lógica do workflow n8n fornecido foi adaptada pa
 O workflow n8n utilizava a seguinte sequência:
 
 1. **Agenda Gatilho** → Executa periodicamente
-2. **Credenciais** → Define API keys (ScapeIt, Supabase)
+2. **Credenciais** → Define API keys (ScapeIt, Backend SQLite/PostgreSQL)
 3. **Definir Nicho e Cidades** → Escolhe aleatoriamente:
    - 27 capitais do Brasil
    - 33 nichos de agências/marketing
@@ -20,7 +20,7 @@ O workflow n8n utilizava a seguinte sequência:
 6. **Extrai Dados do Google Maps** → Usa `https://api.hasdata.com/scrape/google-maps/search`
 7. **Limpa dados** → Mapeia `localResults` para estrutura padronizada
 8. **Refina Dados** → Limpa telefones e emails
-9. **Supabase** → Salva no banco de dados
+9. **Backend SQLite/PostgreSQL** → Salva no banco de dados
 
 ---
 
@@ -201,7 +201,7 @@ TRY 0: HasData Direct → ✅ Sucesso (20 resultados)
 }
 ```
 
-### Passo 6: Salva no Supabase
+### Passo 6: Salva no Backend SQLite/PostgreSQL
 ```typescript
 // Salva na lista selecionada
 // Deduplica por empresa/CNPJ
@@ -221,7 +221,7 @@ TRY 0: HasData Direct → ✅ Sucesso (20 resultados)
 | **Bairros customizados** | ❌ Não | ✅ Sim |
 | **Deduplicação** | ❌ Não | ✅ Sim (por empresa/CNPJ) |
 | **Interface** | n8n UI | Interface web profissional |
-| **Logs** | n8n logs | Console + Supabase logs |
+| **Logs** | n8n logs | Console + Backend SQLite/PostgreSQL logs |
 | **Meta de contatos** | ❌ Não | ✅ Sim (geração iterativa) |
 
 ---
@@ -270,7 +270,7 @@ console.log(`✅ [${timestamp}] [TRY 0] HasData Direct API success: 20 resultado
 ### Para Usar HasData Direct (Recomendado)
 
 1. Obtenha chave em: https://hasdata.com
-2. Configure em: Supabase → Edge Functions → Environment Variables
+2. Configure em: Backend SQLite/PostgreSQL → Edge Functions → Environment Variables
 3. Variável: `RAPIDAPI_KEY` (mesmo nome, funciona para ambas)
 4. Valor: Sua chave HasData
 

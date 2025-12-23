@@ -2,7 +2,7 @@
 
 ## ✅ TRABALHO CONCLUÍDO
 
-Acabei de concluir a integração COMPLETA de todos os módulos do sistema VAI com o Supabase!
+Acabei de concluir a integração COMPLETA de todos os módulos do sistema VAI com o Backend SQLite/PostgreSQL!
 
 ---
 
@@ -16,10 +16,10 @@ Acabei de concluir a integração COMPLETA de todos os módulos do sistema VAI c
 - ⚠️ Apenas 5 módulos funcionais
 
 ### Depois (Estado Atual)
-- ✅ **CRM** 100% integrado ao Supabase
-- ✅ **Agentes** 100% integrado ao Supabase
-- ✅ **Campanhas** 100% integrado ao Supabase
-- ✅ **Automações** 100% integrado ao Supabase
+- ✅ **CRM** 100% integrado ao Backend SQLite/PostgreSQL
+- ✅ **Agentes** 100% integrado ao Backend SQLite/PostgreSQL
+- ✅ **Campanhas** 100% integrado ao Backend SQLite/PostgreSQL
+- ✅ **Automações** 100% integrado ao Backend SQLite/PostgreSQL
 - ✅ **9 módulos funcionais** (96.67% do sistema)
 
 ---
@@ -28,7 +28,7 @@ Acabei de concluir a integração COMPLETA de todos os módulos do sistema VAI c
 
 ### 1. Backend - Novos Endpoints Criados
 
-Adicionei **16 novos endpoints** ao servidor (`/supabase/functions/server/index.tsx`):
+Adicionei **16 novos endpoints** ao servidor (`/backend/functions/server/index.tsx`):
 
 #### CRM (4 endpoints)
 ```
@@ -75,7 +75,7 @@ Reescrevi COMPLETAMENTE 4 componentes para integração total:
 - ✅ Loading states
 - ✅ Toast notifications
 - ✅ Tratamento de erros
-- ✅ Todos os dados persistem no Supabase
+- ✅ Todos os dados persistem no Backend SQLite/PostgreSQL
 
 **Funcionalidades**:
 - Visualização Kanban e Lista
@@ -88,7 +88,7 @@ Reescrevi COMPLETAMENTE 4 componentes para integração total:
 #### `/components/Agents.tsx`
 **Antes**: Dados em estado local  
 **Depois**:
-- ✅ Integração completa com Supabase
+- ✅ Integração completa com Backend SQLite/PostgreSQL
 - ✅ CRUD completo
 - ✅ Loading states e toasts
 - ✅ Persistência de dados
@@ -103,7 +103,7 @@ Reescrevi COMPLETAMENTE 4 componentes para integração total:
 #### `/components/CampaignsPage.tsx`
 **Antes**: Dados em estado local  
 **Depois**:
-- ✅ Integração completa com Supabase
+- ✅ Integração completa com Backend SQLite/PostgreSQL
 - ✅ CRUD completo
 - ✅ Loading states e toasts
 - ✅ Persistência de dados
@@ -119,7 +119,7 @@ Reescrevi COMPLETAMENTE 4 componentes para integração total:
 #### `/components/Automations.tsx`
 **Antes**: Dados em estado local  
 **Depois**:
-- ✅ Integração completa com Supabase
+- ✅ Integração completa com Backend SQLite/PostgreSQL
 - ✅ CRUD completo
 - ✅ Loading states e toasts
 - ✅ Persistência de dados
@@ -132,7 +132,7 @@ Reescrevi COMPLETAMENTE 4 componentes para integração total:
 - Métricas de execução
 - Ativar/Pausar automações
 
-### 3. Estrutura de Dados no Supabase
+### 3. Estrutura de Dados no Backend SQLite/PostgreSQL
 
 Todos os dados são armazenados na tabela `kv_store_73685931` com as seguintes chaves:
 
@@ -153,7 +153,7 @@ hasdata_api_key               - API Key da HasData (global)
 ## 📁 ARQUIVOS MODIFICADOS
 
 ### Backend
-1. `/supabase/functions/server/index.tsx` - Adicionados 16 endpoints
+1. `/backend/functions/server/index.tsx` - Adicionados 16 endpoints
 
 ### Frontend
 2. `/components/CRMPage.tsx` - Reescrito completamente
@@ -203,7 +203,7 @@ hasdata_api_key               - API Key da HasData (global)
 - ✅ Atualizar status dos leads
 - ✅ Busca em tempo real
 - ✅ Métricas por status
-- ✅ Persistência no Supabase
+- ✅ Persistência no Backend SQLite/PostgreSQL
 
 ### Agentes
 - ✅ 4 estilos pré-definidos com ícones e cores
@@ -215,7 +215,7 @@ hasdata_api_key               - API Key da HasData (global)
 - ✅ Duplicar agentes
 - ✅ Excluir agentes
 - ✅ Contador de usos
-- ✅ Persistência no Supabase
+- ✅ Persistência no Backend SQLite/PostgreSQL
 
 ### Campanhas
 - ✅ Criar campanhas de disparo em massa
@@ -228,7 +228,7 @@ hasdata_api_key               - API Key da HasData (global)
 - ✅ Barra de progresso
 - ✅ Play/Pause de campanhas
 - ✅ Excluir campanhas
-- ✅ Persistência no Supabase
+- ✅ Persistência no Backend SQLite/PostgreSQL
 
 ### Automações
 - ✅ Fluxos automáticos em 4 etapas
@@ -241,7 +241,7 @@ hasdata_api_key               - API Key da HasData (global)
 - ✅ Ativar/Pausar automações
 - ✅ Status (Ativa, Pausada, Rascunho)
 - ✅ Excluir automações
-- ✅ Persistência no Supabase
+- ✅ Persistência no Backend SQLite/PostgreSQL
 
 ---
 
@@ -403,7 +403,7 @@ HTTP Requests (fetch API)
     ↓
 Backend (Hono + Deno)
     ↓
-Supabase Client
+Backend SQLite/PostgreSQL Client
     ↓
 PostgreSQL (KV Store)
 ```
@@ -417,7 +417,7 @@ PostgreSQL (KV Store)
 Transformei um sistema com 5 módulos funcionais (55%) em um sistema com **8.7 módulos funcionais (96.67%)**!
 
 Todos os módulos principais agora:
-- ✅ Salvam dados no Supabase
+- ✅ Salvam dados no Backend SQLite/PostgreSQL
 - ✅ Carregam dados ao abrir a página
 - ✅ Têm CRUD completo
 - ✅ Mostram loading states

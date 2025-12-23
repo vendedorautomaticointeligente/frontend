@@ -15,7 +15,7 @@ Implementar a lógica do workflow n8n fornecido para geração de listas B2B, ad
 
 ### 1. **API HasData Direct** (Nova - Primeira Opção)
 
-**Arquivo**: `/supabase/functions/server/api-integrations.tsx`
+**Arquivo**: `/backend/functions/server/api-integrations.tsx`
 
 ```typescript
 // TRY 0: HasData Direct API (como no workflow n8n)
@@ -103,7 +103,7 @@ results = directResults.map(item => ({
 ### Para Usar HasData Direct (Recomendado - Como N8N)
 
 1. **Obter chave**: https://hasdata.com
-2. **Configurar no Supabase**:
+2. **Configurar no Backend SQLite/PostgreSQL**:
    - Settings → Edge Functions → Environment Variables
    - Variável: `RAPIDAPI_KEY`
    - Valor: Sua chave HasData
@@ -161,7 +161,7 @@ results = directResults.map(item => ({
 ```
 1. Criar conta em https://hasdata.com
 2. Copiar API key
-3. Supabase → Settings → Edge Functions → Env Vars
+3. Backend SQLite/PostgreSQL → Settings → Edge Functions → Env Vars
 4. RAPIDAPI_KEY = sua_chave_hasdata
 ```
 
@@ -170,7 +170,7 @@ results = directResults.map(item => ({
 1. Criar conta em https://rapidapi.com
 2. Inscrever-se em uma das APIs listadas
 3. Copiar X-RapidAPI-Key
-4. Supabase → Settings → Edge Functions → Env Vars
+4. Backend SQLite/PostgreSQL → Settings → Edge Functions → Env Vars
 5. RAPIDAPI_KEY = sua_chave_rapidapi
 ```
 
@@ -241,7 +241,7 @@ results = directResults.map(item => ({
 
 ## 📝 Arquivos Modificados
 
-1. **`/supabase/functions/server/api-integrations.tsx`**
+1. **`/backend/functions/server/api-integrations.tsx`**
    - Adicionado TRY 0 com HasData Direct API
    - Mapeamento de dados estilo n8n
    - Logs detalhados para cada tentativa
@@ -293,4 +293,4 @@ A lógica do workflow n8n foi **IMPLEMENTADA COM SUCESSO** no sistema VAI, com a
 
 ---
 
-**Observação**: O sistema está pronto para uso. A única coisa que você precisa fazer é se inscrever em pelo menos uma das APIs e configurar a chave na variável `RAPIDAPI_KEY` do Supabase.
+**Observação**: O sistema está pronto para uso. A única coisa que você precisa fazer é se inscrever em pelo menos uma das APIs e configurar a chave na variável `RAPIDAPI_KEY` do Backend SQLite/PostgreSQL.

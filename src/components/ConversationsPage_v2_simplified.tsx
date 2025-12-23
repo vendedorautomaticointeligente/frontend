@@ -1,0 +1,1304 @@
+import { useState, useCallback, useRef, useEffect } from "react"
+import { Search, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Send, Loader2, X, AlertCircle, RefreshCw, UserCircle } from "lucide-react"
+import { Input } from "./ui/input"
+import { Button } from "./ui/button"
+import { Avatar, AvatarFallback } from "./ui/avatar"
+import { useAuth } from "../hooks/useAuthLaravel"
+import { toast } from "sonner"
+import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
+import { getApiUrl } from "../utils/apiConfig"
+import { formatCurrency } from "../utils/formatters"
+
+// ============================================================================
+// TYPES - Simples e Diretos
+// ============================================================================
+
+type Message = {
+  id: string
+  text: string
+  timestamp: string
+  isSent: boolean
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+}
+
+type Conversation = {
+  id: string
+  phone_number: string
+  contact_name: string
+  avatar: string
+  lastMessage: string
+  lastMessageTime: string
+  unread_count: number
+  whatsapp_instance_name?: string
+  lead?: {
+    id: string
+    name: string
+    company: string | null
+    email: string | null
+    phone: string | null
+    city: string | null
+    state: string | null
+    segment: string | null
+    status: string
+    score: number
+    value: number
+    source: string | null
+  } | null
+}
+
+// ============================================================================
+// COMPONENTE PRINCIPAL - Simplificado
+// ============================================================================
+
+const resolveApiUrl = getApiUrl
+
+export function ConversationsPage() {
+  const { accessToken, user } = useAuth()
+  const baseUrl = resolveApiUrl()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+
+  // STATE - Apenas 3 coisas necessárias
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
+  const [messages, setMessages] = useState<Message[]>([])
+
+  // STATE - CRM Panel
+  const [isCrmPanelOpen, setIsCrmPanelOpen] = useState(false)
+  const [crmFormData, setCrmFormData] = useState({
+    name: '',
+    company: '',
+    email: '',
+    phone: '',
+    city: '',
+    state: '',
+    segment: '',
+    status: 'new',
+    source: 'manual_conversation'
+  })
+  const [isSavingLead, setIsSavingLead] = useState(false)
+  const [availableProducts, setAvailableProducts] = useState<any[]>([])
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(false)
+  const [isCreatingProduct, setIsCreatingProduct] = useState(false)
+  const [newProductData, setNewProductData] = useState({
+    name: '',
+    recurrence: 'unique',
+    price: 0,
+    observations: ''
+  })
+  const [isSavingProduct, setIsSavingProduct] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [loadingMessages, setLoadingMessages] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [messageInput, setMessageInput] = useState('')
+
+  // 🔥 CACHE: Evitar recarregamentos desnecessários
+  const messagesCache = useRef<Map<string, Message[]>>(new Map())
+  const lastLoadTime = useRef<Map<string, number>>(new Map())
+
+  // ============================================================================
+  // FUNÇÃO 1: Carregar Conversas (uma vez no mount)
+  // ============================================================================
+
+  const loadConversations = useCallback(async (silent = false) => {
+    if (!accessToken) return
+
+    try {
+      if (!silent) setLoading(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/conversations`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        toast.error('Erro ao carregar conversas')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success' && data.data?.data) {
+        const convs = data.data.data.map((c: any) => ({
+          id: c.id,
+          phone_number: c.phone_number,
+          contact_name: c.contact_name || 'Sem nome',
+          avatar: '👤',
+          lastMessage: c.last_message || 'Sem mensagens',
+          lastMessageTime: c.last_message_at || new Date().toISOString(),
+          unread_count: c.unread_count || 0,
+          whatsapp_instance_name: c.whatsapp_instance_name,
+          lead: c.lead || null
+        }))
+        setConversations(convs)
+        
+        // Se não há conversa selecionada, selecionar a primeira
+        if (!selectedConversation && convs.length > 0) {
+          setSelectedConversation(convs[0])
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error)
+      toast.error('Erro ao carregar conversas')
+    } finally {
+      if (!silent) setLoading(false)
+    }
+  }, [accessToken, baseUrl, selectedConversation])
+
+  // ============================================================================
+  // FUNÇÃO 2: Carregar Mensagens da Conversa
+  // ============================================================================
+
+  const loadMessages = useCallback(async () => {
+    if (!selectedConversation || !accessToken) return
+
+    // 🔥 PROTEÇÃO: Evitar múltiplas chamadas simultâneas
+    if (loadingMessages) {
+      return
+    }
+
+    const conversationId = selectedConversation.id
+    const now = Date.now()
+    const lastLoad = lastLoadTime.current.get(conversationId) || 0
+    const cacheAge = now - lastLoad
+
+    // 🔥 CACHE: Se carregou há menos de 10 segundos E cache existe, usar cache
+    // Mas sempre recarregar se não há cache
+    if (cacheAge < 10000 && messagesCache.current.has(conversationId)) {
+      const cachedMessages = messagesCache.current.get(conversationId)!
+      setMessages(cachedMessages)
+      return
+    }
+
+    // 🔥 Se não há cache, sempre recarregar
+    if (!messagesCache.current.has(conversationId)) {
+    } else {
+    }
+
+    try {
+      setLoadingMessages(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${conversationId}/messages`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } },
+        { timeout: 15000 } // 🔥 REDUZIDO: 15s em vez de 120s para carregamento mais rápido
+      )
+
+      if (!response?.ok) {
+        toast.error('Erro ao carregar mensagens')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success' && Array.isArray(data.data)) {
+        const msgs = data.data.map((m: any) => ({
+          id: m.id,
+          text: m.text,
+          timestamp: new Date(m.created_at).toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit'
+          }),
+          isSent: m.direction === 'sent',
+          status: m.direction === 'sent' ? 'read' : undefined
+        }))
+
+        // 🔥 CACHE: Armazenar no cache
+        messagesCache.current.set(conversationId, msgs)
+        lastLoadTime.current.set(conversationId, now)
+
+        setMessages(msgs)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar mensagens:', error)
+      toast.error('Erro ao carregar mensagens')
+    } finally {
+      setLoadingMessages(false)
+    }
+  }, [selectedConversation, accessToken, baseUrl])
+
+  // ============================================================================
+  // FUNÇÃO 3: Enviar Mensagem (SEM DELAYS, SEM CACHE)
+  // ============================================================================
+
+  const handleSendMessage = useCallback(async () => {
+    if (!messageInput.trim() || !selectedConversation || isSending) return
+
+    const messageText = messageInput
+    const tempId = `temp-${Date.now()}`
+
+    // Mostrar localmente AGORA (otimistic update)
+    setMessages(prev => [...prev, {
+      id: tempId,
+      text: messageText,
+      timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      isSent: true,
+      status: 'sent'
+    }])
+
+    setMessageInput('')
+    setIsSending(true)
+
+    try {
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}/send`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify({ text: messageText })
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        // Remover mensagem se falhar
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        toast.error('Erro ao enviar mensagem')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        // Substituir mensagem temp pela real
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === tempId
+              ? { ...m, id: data.id, status: 'sent' }
+              : m
+          )
+        )
+        toast.success('Mensagem enviada!')
+      } else {
+        setMessages(prev => prev.filter(m => m.id !== tempId))
+        toast.error('Erro ao enviar mensagem')
+      }
+    } catch (error) {
+      console.error('Erro ao enviar:', error)
+      setMessages(prev => prev.filter(m => m.id !== tempId))
+      toast.error('Erro ao enviar mensagem')
+    } finally {
+      setIsSending(false)
+    }
+  }, [messageInput, selectedConversation, accessToken, baseUrl, isSending])
+
+  // ============================================================================
+  // EFEITO 1: Carregar conversas uma vez no mount
+  // ============================================================================
+
+  useEffect(() => {
+    if (accessToken) {
+      loadConversations()
+    }
+  }, [accessToken]) // Só executa uma vez
+
+  // ============================================================================
+  // EFEITO 3: Auto-scroll para última mensagem
+  // ============================================================================
+
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  // ============================================================================
+  // EFEITO 4: Sistema SSE Only - Sem Polling
+  // ============================================================================
+
+  useEffect(() => {
+    if (!accessToken) return
+
+    let sseAttempts = 0
+    let sseTimeout: NodeJS.Timeout | null = null
+
+    const upsertConversationFromSSE = (incoming: any) => {
+      if (!incoming?.id) return
+
+      setConversations(prev => {
+        const idx = prev.findIndex(c => c.id === incoming.id)
+        const base: Conversation = {
+          id: incoming.id,
+          phone_number: incoming.phone_number || '',
+          contact_name: incoming.name || incoming.contact_name || incoming.phone_number || 'Sem nome',
+          avatar: '👤',
+          lastMessage: incoming.last_message || 'Sem mensagens',
+          lastMessageTime: incoming.last_message_at || new Date().toISOString(),
+          unread_count: incoming.unread_count ?? 0,
+          whatsapp_instance_name: incoming.whatsapp_instance_name
+        }
+
+        if (idx === -1) {
+          return [base, ...prev]
+        }
+
+        const updated = { ...prev[idx], ...base }
+        const clone = [...prev]
+        clone[idx] = updated
+        return clone
+      })
+    }
+
+    const connectSSE = () => {
+      try {
+        const sseUrl = `${baseUrl}/sse/stream?token=${accessToken}`
+
+        const eventSource = new EventSource(sseUrl, { withCredentials: true })
+        eventSourceRef.current = eventSource
+        sseAttempts++
+
+        let lastHeartbeat = Date.now()
+        let heartbeatTimeout: NodeJS.Timeout | null = null
+        let connectionStartTime = Date.now()
+
+        const startHeartbeatMonitor = () => {
+          if (heartbeatTimeout) clearTimeout(heartbeatTimeout)
+          heartbeatTimeout = setTimeout(() => {
+            eventSource.close()
+            eventSourceRef.current = null
+            handleReconnection()
+          }, 45000)
+        }
+
+        const handleReconnection = () => {
+          if (heartbeatTimeout) clearTimeout(heartbeatTimeout)
+
+          if (sseAttempts < 5) {
+            const delay = Math.min(2000 * Math.pow(2, sseAttempts - 1), 30000)
+            setTimeout(connectSSE, delay)
+          }
+        }
+
+        eventSource.addEventListener('connected', (event) => {
+          const data = JSON.parse(event.data)
+          sseAttempts = 0
+          lastHeartbeat = Date.now()
+          startHeartbeatMonitor()
+        })
+
+        eventSource.addEventListener('heartbeat', (event) => {
+          const data = JSON.parse(event.data)
+          const now = Date.now()
+          lastHeartbeat = now
+          startHeartbeatMonitor()
+        })
+
+        eventSource.addEventListener('message_received', (event) => {
+          const data = JSON.parse(event.data)
+          if (selectedConversation?.id === data.conversation_id?.toString()) {
+            setMessages(prev => {
+              const exists = prev.find(m => m.id === data.id)
+              if (exists) return prev
+
+              const newMessage: Message = {
+                id: data.id,
+                text: data.text,
+                timestamp: data.created_at,
+                isSent: false,
+                status: 'sent'
+              }
+              return [...prev, newMessage]
+            })
+          }
+
+          upsertConversationFromSSE(data)
+        })
+
+        eventSource.addEventListener('message_accepted', (event) => {
+          const data = JSON.parse(event.data)
+          if (selectedConversation?.id === data.conversation_id?.toString()) {
+            setMessages(prev => prev.map(m =>
+              m.id === data.message_id?.toString()
+                ? { ...m, status: 'sending' as const }
+                : m
+            ))
+          }
+        })
+
+        eventSource.addEventListener('message_status_update', (event) => {
+          const data = JSON.parse(event.data)
+          if (selectedConversation?.id === data.conversation_id?.toString()) {
+            setMessages(prev => prev.map(m =>
+              m.id === data.message_id?.toString()
+                ? { ...m, status: data.status }
+                : m
+            ))
+          }
+        })
+
+        eventSource.addEventListener('error', (event) => {
+          handleReconnection()
+        })
+
+        eventSource.addEventListener('close', (event) => {
+          handleReconnection()
+        })
+
+      } catch (error) {
+        handleReconnection()
+      }
+    }
+
+    connectSSE()
+
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
+      if (sseTimeout) clearTimeout(sseTimeout)
+    }
+  }, [accessToken, baseUrl, selectedConversation?.id])
+
+
+  // ============================================================================
+  // FUNÇÕES CRM
+  // ============================================================================
+
+  // ============================================================================
+  // FUNÇÃO PARA CARREGAR PRODUTOS DISPONÍVEIS
+  // ============================================================================
+
+  const loadAvailableProducts = useCallback(async () => {
+    if (!accessToken) return
+
+    try {
+      setIsLoadingProducts(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/products`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        console.error('Erro ao carregar produtos')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.products) {
+        setAvailableProducts(data.products)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar produtos:', error)
+    } finally {
+      setIsLoadingProducts(false)
+    }
+  }, [accessToken, baseUrl])
+
+  // ============================================================================
+  // FUNÇÃO PARA CARREGAR PRODUTOS DO LEAD
+  // ============================================================================
+
+  const loadLeadProducts = useCallback(async (leadId: string) => {
+    if (!accessToken || !leadId) return
+
+    try {
+      const response = await safeFetch(
+        `${baseUrl}/crm/leads/${leadId}/products`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        console.error('Erro ao carregar produtos do lead')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.success && data.products) {
+        setSelectedProductIds(data.products.map((p: any) => p.id))
+      }
+    } catch (error) {
+      console.error('Erro ao carregar produtos do lead:', error)
+    }
+  }, [accessToken, baseUrl])
+
+  // ============================================================================
+  // FUNÇÃO PARA CRIAR NOVO PRODUTO
+  // ============================================================================
+
+  const createProduct = useCallback(async () => {
+    if (!accessToken || !newProductData.name.trim()) return
+
+    try {
+      setIsSavingProduct(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/products`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(newProductData)
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        const errorData = await response?.json()
+        throw new Error(errorData?.message || 'Erro ao criar produto')
+      }
+
+      const data = await response.json()
+
+      if (data.product) {
+        toast.success('Produto criado com sucesso!')
+        
+        // Adicionar o novo produto à lista disponível
+        setAvailableProducts(prev => [...prev, data.product])
+        
+        // Selecionar automaticamente o produto recém-criado
+        setSelectedProductIds(prev => [...prev, data.product.id])
+        
+        // Resetar formulário
+        setNewProductData({
+          name: '',
+          recurrence: 'unique',
+          price: 0,
+          observations: ''
+        })
+        
+        setIsCreatingProduct(false)
+      } else {
+        throw new Error('Resposta inválida do servidor')
+      }
+    } catch (error) {
+      console.error('Erro ao criar produto:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao criar produto')
+    } finally {
+      setIsSavingProduct(false)
+    }
+  }, [accessToken, baseUrl, newProductData])
+
+  const openCrmPanel = useCallback(() => {
+    if (!selectedConversation) return
+
+    // Preencher formulário com dados existentes do lead ou dados da conversa
+    if (selectedConversation.lead) {
+      setCrmFormData({
+        name: selectedConversation.lead.name || selectedConversation.contact_name,
+        company: selectedConversation.lead.company || '',
+        email: selectedConversation.lead.email || '',
+        phone: selectedConversation.lead.phone || selectedConversation.phone_number,
+        city: selectedConversation.lead.city || '',
+        state: selectedConversation.lead.state || '',
+        segment: selectedConversation.lead.segment || '',
+        status: selectedConversation.lead.status || 'new',
+        source: selectedConversation.lead.source || 'manual_conversation'
+      })
+      // Carregar produtos do lead existente
+      loadLeadProducts(selectedConversation.lead.id.toString())
+    } else {
+      // Novo lead - preencher com dados da conversa
+      setCrmFormData({
+        name: selectedConversation.contact_name,
+        company: '',
+        email: '',
+        phone: selectedConversation.phone_number,
+        city: '',
+        state: '',
+        segment: '',
+        status: 'new',
+        source: 'manual_conversation'
+      })
+      // Resetar produtos selecionados
+      setSelectedProductIds([])
+    }
+
+    // Carregar produtos disponíveis se ainda não carregados
+    if (availableProducts.length === 0) {
+      loadAvailableProducts()
+    }
+
+    setIsCrmPanelOpen(true)
+  }, [selectedConversation, loadLeadProducts, loadAvailableProducts, availableProducts.length])
+
+  const closeCrmPanel = useCallback(() => {
+    setIsCrmPanelOpen(false)
+  }, [])
+
+  // ============================================================================
+  // EFEITO 2: Carregar mensagens quando conversa muda
+  // ============================================================================
+
+  useEffect(() => {
+    if (selectedConversation) {
+      loadMessages()
+      // 🔥 ABRIR PAINEL CRM AUTOMATICAMENTE ao selecionar conversa
+      openCrmPanel()
+    }
+  }, [selectedConversation, loadMessages, openCrmPanel])
+
+  const saveLead = useCallback(async () => {
+    if (!selectedConversation || !accessToken) return
+
+    try {
+      setIsSavingLead(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}/lead`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(crmFormData)
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        const errorData = await response?.json()
+        throw new Error(errorData?.message || 'Erro ao salvar lead')
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        toast.success(selectedConversation.lead ? 'Lead atualizado com sucesso!' : 'Lead criado com sucesso!')
+
+        // Vincular produtos se houver algum selecionado
+        if (selectedProductIds.length > 0 && data.data.lead?.id) {
+          try {
+            const linkResponse = await safeFetch(
+              `${baseUrl}/crm/leads/${data.data.lead.id}/products`,
+              {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ product_ids: selectedProductIds })
+              },
+              { timeout: FETCH_DEFAULT_TIMEOUT }
+            )
+
+            if (linkResponse?.ok) {
+              const linkData = await linkResponse.json()
+              if (linkData.success) {
+                // Atualizar lead com produtos vinculados
+                data.data.lead = linkData.lead
+              }
+            }
+          } catch (linkError) {
+            console.error('Erro ao vincular produtos:', linkError)
+            toast.warning('Lead salvo, mas houve erro ao vincular produtos')
+          }
+        }
+
+        // Atualizar conversa localmente com os dados do lead
+        setConversations(prev => prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, lead: data.data.lead }
+            : conv
+        ))
+
+        // Atualizar selectedConversation
+        setSelectedConversation(prev => prev ? { ...prev, lead: data.data.lead } : null)
+
+        closeCrmPanel()
+      } else {
+        throw new Error(data.message || 'Erro desconhecido')
+      }
+    } catch (error) {
+      console.error('Erro ao salvar lead:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar lead')
+    } finally {
+      setIsSavingLead(false)
+    }
+  }, [selectedConversation, accessToken, baseUrl, crmFormData, selectedProductIds, closeCrmPanel])
+
+  const removeLead = useCallback(async () => {
+    if (!selectedConversation || !accessToken || !selectedConversation.lead) return
+
+    try {
+      setIsSavingLead(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}/lead`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        const errorData = await response?.json()
+        throw new Error(errorData?.message || 'Erro ao remover lead')
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        toast.success('Lead removido com sucesso!')
+
+        // Atualizar conversa localmente removendo o lead
+        setConversations(prev => prev.map(conv =>
+          conv.id === selectedConversation.id
+            ? { ...conv, lead: null }
+            : conv
+        ))
+
+        // Atualizar selectedConversation
+        setSelectedConversation(prev => prev ? { ...prev, lead: null } : null)
+
+        closeCrmPanel()
+      } else {
+        throw new Error(data.message || 'Erro desconhecido')
+      }
+    } catch (error) {
+      console.error('Erro ao remover lead:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao remover lead')
+    } finally {
+      setIsSavingLead(false)
+    }
+  }, [selectedConversation, accessToken, baseUrl, closeCrmPanel])
+
+  // ============================================================================
+  // RENDER: Lista de Conversas
+  // ============================================================================
+
+  const filteredConversations = conversations.filter(c =>
+    c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    c.phone_number.includes(searchQuery)
+  )
+
+  if (!accessToken) {
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50">
+        <p className="text-gray-500">Não autenticado</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/40">
+      {/* Header */}
+      <div className="bg-white/80 backdrop-blur-sm border-b border-gray-200/60 px-6 py-3 shadow-sm flex-shrink-0 z-20">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-gray-800">Conversas</h1>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => loadConversations(false)}
+              disabled={loading}
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Conversations List - Coluna estreita */}
+        <div className="w-64 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg overflow-hidden flex-shrink-0">
+          {/* Search */}
+          <div className="p-4 border-b border-gray-200/60 space-y-3 bg-gradient-to-r from-white/90 to-blue-50/50 flex-shrink-0">
+            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
+              <Search className="w-4 h-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Buscar..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="border-0 focus:outline-none focus:ring-0 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Conversations - Layout compacto */}
+          <div className="flex-1 overflow-y-auto">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+              </div>
+            ) : filteredConversations.length === 0 ? (
+              <div className="flex items-center justify-center h-full text-gray-500">
+                <p className="text-sm">Nenhuma conversa</p>
+              </div>
+            ) : (
+              filteredConversations.map(conv => (
+                <div
+                  key={conv.id}
+                  onClick={() => setSelectedConversation(conv)}
+                  className={`
+                    p-3 border-b border-gray-200/40 cursor-pointer transition
+                    hover:bg-blue-50/50
+                    ${selectedConversation?.id === conv.id ? 'bg-blue-100/60 border-l-4 border-l-blue-500' : ''}
+                  `}
+                >
+                  <div className="flex items-start gap-2">
+                    <Avatar className="w-10 h-10 flex-shrink-0">
+                      <AvatarFallback className="text-xs">{conv.contact_name[0] || '?'}</AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex justify-between items-baseline gap-1">
+                        <p className="font-medium text-gray-900 truncate text-sm">
+                          {conv.contact_name}
+                        </p>
+                        <p className="text-xs text-gray-500 flex-shrink-0">
+                          {new Date(conv.lastMessageTime).toLocaleTimeString('pt-BR', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-600 line-clamp-1">
+                        {conv.phone_number}
+                      </p>
+                      <p className="text-xs text-gray-500 line-clamp-1 mt-0.5">
+                        {conv.lastMessage}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Chat Area - Ocupa maior parte da tela */}
+        {selectedConversation ? (
+          <div className="flex-1 flex flex-col bg-gray-50">
+            {/* Chat Header - Compacto */}
+            <div className="bg-white border-b border-gray-200/60 px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="text-xs">{selectedConversation.contact_name[0] || '?'}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium text-gray-900 text-sm">
+                    {selectedConversation.contact_name}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {selectedConversation.phone_number}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={openCrmPanel}
+                  className={`h-8 w-8 p-0 ${isCrmPanelOpen ? 'bg-blue-100 text-blue-600' : ''}`}
+                  title={selectedConversation.lead ? 'Editar lead no CRM' : 'Criar lead no CRM'}
+                >
+                  <UserCircle className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Phone className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <Video className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                  <MoreVertical className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-3">
+              {loadingMessages ? (
+                <div className="flex items-center justify-center h-full">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                </div>
+              ) : messages.length === 0 ? (
+                <div className="flex items-center justify-center h-full text-gray-500">
+                  <p>Nenhuma mensagem</p>
+                </div>
+              ) : (
+                messages.map(msg => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.isSent ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`
+                        max-w-md px-3 py-2 rounded-lg
+                        ${msg.isSent
+                          ? 'bg-blue-500 text-white rounded-br-none'
+                          : 'bg-gray-200 text-gray-900 rounded-bl-none'
+                        }
+                        ${msg.status === 'sending' ? 'opacity-75' : ''}
+                      `}
+                    >
+                      <p className="text-sm">{msg.text}</p>
+                      <div className={`flex items-center gap-1 mt-1 ${msg.isSent ? 'text-blue-100' : 'text-gray-600'}`}>
+                        <p className="text-xs">{msg.timestamp}</p>
+                        {msg.status === 'sending' && (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        )}
+                        {msg.status === 'failed' && (
+                          <X className="w-3 h-3 text-red-500" />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Input - Compacto */}
+            <div className="bg-white border-t border-gray-200/60 p-3 flex-shrink-0">
+              <div className="flex gap-2">
+                <div className="flex-1 flex items-end gap-2 bg-gray-100 rounded-lg px-3 py-2">
+                  <Input
+                    type="text"
+                    placeholder="Digite uma mensagem..."
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendMessage()
+                      }
+                    }}
+                    className="border-0 bg-transparent focus:ring-0 text-sm"
+                  />
+                </div>
+                <Button
+                  onClick={handleSendMessage}
+                  disabled={isSending || !messageInput.trim()}
+                  className="bg-blue-500 hover:bg-blue-600 h-10 w-10 p-0"
+                >
+                  {isSending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-50">
+            <p className="text-gray-500">Selecione uma conversa para começar</p>
+          </div>
+        )}
+
+        {/* CRM Panel - Coluna lateral */}
+        {isCrmPanelOpen && selectedConversation && (
+          <div className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-lg">
+            {/* CRM Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <h3 className="font-semibold text-sm">
+                {selectedConversation.lead ? 'Editar Lead' : 'Criar Lead'}
+              </h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={closeCrmPanel}
+                className="text-white hover:bg-white/20 h-6 w-6 p-0"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* CRM Form */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Nome *
+                  </label>
+                  <Input
+                    type="text"
+                    value={crmFormData.name}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Nome do contato"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Empresa
+                  </label>
+                  <Input
+                    type="text"
+                    value={crmFormData.company}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, company: e.target.value }))}
+                    placeholder="Nome da empresa"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Email
+                  </label>
+                  <Input
+                    type="email"
+                    value={crmFormData.email}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="email@exemplo.com"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Telefone
+                  </label>
+                  <Input
+                    type="text"
+                    value={crmFormData.phone}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="(11) 99999-9999"
+                    className="text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Cidade
+                    </label>
+                    <Input
+                      type="text"
+                      value={crmFormData.city}
+                      onChange={(e) => setCrmFormData(prev => ({ ...prev, city: e.target.value }))}
+                      placeholder="São Paulo"
+                      className="text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Estado
+                    </label>
+                    <Input
+                      type="text"
+                      value={crmFormData.state}
+                      onChange={(e) => setCrmFormData(prev => ({ ...prev, state: e.target.value }))}
+                      placeholder="SP"
+                      className="text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Segmento
+                  </label>
+                  <Input
+                    type="text"
+                    value={crmFormData.segment}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, segment: e.target.value }))}
+                    placeholder="Ex: Tecnologia, Varejo..."
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Status *
+                  </label>
+                  <select
+                    value={crmFormData.status}
+                    onChange={(e) => setCrmFormData(prev => ({ ...prev, status: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="new">Novo</option>
+                    <option value="contacted">Contactado</option>
+                    <option value="qualified">Qualificado</option>
+                    <option value="proposal">Proposta</option>
+                    <option value="won">Ganho</option>
+                    <option value="lost">Perdido</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Seção de Produtos */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="text-sm font-medium text-gray-700">Produtos/Serviços</h4>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCreatingProduct(!isCreatingProduct)}
+                    className="text-xs"
+                  >
+                    {isCreatingProduct ? 'Cancelar' : '+ Novo Produto'}
+                  </Button>
+                </div>
+
+                {isCreatingProduct && (
+                  <div className="mb-4 p-3 border border-blue-200 rounded-lg bg-blue-50">
+                    <h5 className="text-sm font-medium text-gray-700 mb-3">Criar Novo Produto</h5>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Nome *
+                        </label>
+                        <Input
+                          type="text"
+                          value={newProductData.name}
+                          onChange={(e) => setNewProductData(prev => ({ ...prev, name: e.target.value }))}
+                          placeholder="Nome do produto"
+                          className="text-sm"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Recorrência *
+                          </label>
+                          <select
+                            value={newProductData.recurrence}
+                            onChange={(e) => setNewProductData(prev => ({ ...prev, recurrence: e.target.value }))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="unique">Único</option>
+                            <option value="recurring">Recorrente</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
+                            Preço (R$) *
+                          </label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            value={newProductData.price}
+                            onChange={(e) => setNewProductData(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
+                            placeholder="0.00"
+                            className="text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Observações
+                        </label>
+                        <Input
+                          type="text"
+                          value={newProductData.observations}
+                          onChange={(e) => setNewProductData(prev => ({ ...prev, observations: e.target.value }))}
+                          placeholder="Observações opcionais"
+                          className="text-sm"
+                        />
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={createProduct}
+                        disabled={isSavingProduct || !newProductData.name.trim()}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      >
+                        {isSavingProduct ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Criando...
+                          </>
+                        ) : (
+                          'Criar Produto'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {isLoadingProducts ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    <span className="ml-2 text-xs text-gray-500">Carregando produtos...</span>
+                  </div>
+                ) : availableProducts.length === 0 && !isCreatingProduct ? (
+                  <p className="text-xs text-gray-500">Nenhum produto disponível. Clique em "+ Novo Produto" para criar.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {availableProducts.map(product => (
+                      <div key={product.id} className="flex items-center justify-between p-2 border border-gray-200 rounded">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{product.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {formatCurrency(product.price)} - {product.recurrence === 'recurring' ? 'Recorrente' : 'Único'}
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant={selectedProductIds.includes(product.id) ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => {
+                            setSelectedProductIds(prev =>
+                              prev.includes(product.id)
+                                ? prev.filter(id => id !== product.id)
+                                : [...prev, product.id]
+                            )
+                          }}
+                          className="text-xs"
+                        >
+                          {selectedProductIds.includes(product.id) ? 'Selecionado' : 'Selecionar'}
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* CRM Actions */}
+            <div className="border-t border-gray-200 p-4 space-y-3">
+              <Button
+                onClick={saveLead}
+                disabled={isSavingLead || !crmFormData.name.trim()}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isSavingLead ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    Salvando...
+                  </>
+                ) : (
+                  selectedConversation.lead ? 'Atualizar Lead' : 'Criar Lead'
+                )}
+              </Button>
+
+              {selectedConversation.lead && (
+                <Button
+                  onClick={removeLead}
+                  disabled={isSavingLead}
+                  variant="outline"
+                  className="w-full border-red-300 text-red-600 hover:bg-red-50"
+                >
+                  {isSavingLead ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Removendo...
+                    </>
+                  ) : (
+                    'Remover Lead'
+                  )}
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

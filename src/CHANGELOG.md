@@ -240,7 +240,7 @@ Transformar o sistema em **100% funcional para produção** removendo todos os d
 ### Admin Panel Melhorado
 - ✅ Sistema de mascaramento de chaves de API
 - ✅ Toggle para mostrar/ocultar chaves completas
-- ✅ Salvamento correto no Supabase (kv_store_73685931)
+- ✅ Salvamento correto no Backend SQLite/PostgreSQL (kv_store_73685931)
 - ✅ Backup automático no localStorage
 - ✅ Feedback visual com toasts (Sonner)
 - ✅ Diagnóstico de conexão avançado
@@ -399,7 +399,7 @@ catch (error) {
 ### Melhorias Implementadas
 - ✅ Chaves de API mascaradas na UI (apenas últimos 4 caracteres visíveis)
 - ✅ Toggle seguro para mostrar/ocultar chaves completas
-- ✅ Salvamento primário no Supabase (servidor)
+- ✅ Salvamento primário no Backend SQLite/PostgreSQL (servidor)
 - ✅ Backup secundário no localStorage (cliente)
 - ✅ Service role key mantida apenas no servidor
 - ✅ Validação de tokens JWT em todas as rotas protegidas
@@ -497,7 +497,7 @@ Status: PASSOU
 Busca realizada: Restaurantes em SP ✅
 Dados recebidos: 15 contatos reais ✅
 Validação aplicada: Todos válidos ✅
-Salvamento: Supabase OK ✅
+Salvamento: Backend SQLite/PostgreSQL OK ✅
 ```
 
 #### ✅ Teste 3: Erro sem API Key
@@ -561,7 +561,7 @@ Feedback visual: Toasts OK ✅
 ## 🚀 DEPLOYMENT (Deploy)
 
 ### Pré-requisitos
-- ✅ Supabase project configurado
+- ✅ Backend SQLite/PostgreSQL project configurado
 - ✅ Edge Function deployed
 - ✅ Tabela kv_store_73685931 criada
 - ✅ Admin user criado (admin@vai.com.br)

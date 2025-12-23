@@ -11,6 +11,7 @@ import { Progress } from "./ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { formatNumber } from "../utils/formatters"
+import { getApiUrl } from "../utils/apiConfig"
 import { 
   Search, 
   Loader2, 
@@ -158,7 +159,7 @@ export function ListGeneratorB2C() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
 
   // Timer effect for elapsed time display
   useEffect(() => {

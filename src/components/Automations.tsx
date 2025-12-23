@@ -12,6 +12,9 @@ import { Checkbox } from "./ui/checkbox"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { formatDate } from "../utils/formatters"
 import { toast } from "sonner"
+import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
+import { readJsonCache, writeJsonCache } from "../utils/localCache"
+import { getApiUrl } from '../utils/apiConfig'
 import { 
   Zap, 
   Plus, 
@@ -32,7 +35,9 @@ import {
   Mail,
   MessageCircle,
   Instagram,
-  Facebook
+  Facebook,
+  AlertCircle,
+  RefreshCw
 } from "lucide-react"
 
 interface Automation {
@@ -76,15 +81,28 @@ interface SavedList {
   createdAt: string
 }
 
+const AUTOMATIONS_CACHE_KEY = "automations_cache"
+const AUTOMATIONS_META_CACHE_KEY = "automations_cache_meta"
+const AUTOMATION_LISTS_CACHE_KEY = "automations_lists_cache"
+const AUTOMATION_AGENTS_CACHE_KEY = "automations_agents_cache"
+
 export function Automations() {
   const { accessToken } = useAuth()
-  const [automations, setAutomations] = useState<Automation[]>([])
-  const [savedLists, setSavedLists] = useState<SavedList[]>([])
-  const [agents, setAgents] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingLists, setLoadingLists] = useState(false)
+  const [automations, setAutomations] = useState<Automation[]>(() => readJsonCache<Automation[]>(AUTOMATIONS_CACHE_KEY) ?? [])
+  const [savedLists, setSavedLists] = useState<SavedList[]>(() => readJsonCache<SavedList[]>(AUTOMATION_LISTS_CACHE_KEY) ?? [])
+  const [agents, setAgents] = useState<any[]>(() => readJsonCache<any[]>(AUTOMATION_AGENTS_CACHE_KEY) ?? [])
+  const [loading, setLoading] = useState(automations.length === 0)
+  const [loadingLists, setLoadingLists] = useState(savedLists.length === 0)
   const [showNewAutomationDialog, setShowNewAutomationDialog] = useState(false)
   const [selectedAutomation, setSelectedAutomation] = useState<Automation | null>(null)
+  const [lastAutomationsSync, setLastAutomationsSync] = useState<string | null>(() => {
+    const meta = readJsonCache<{ lastSync?: string }>(AUTOMATIONS_META_CACHE_KEY)
+    return meta?.lastSync ? new Date(meta.lastSync).toLocaleTimeString() : null
+  })
+  const [automationError, setAutomationError] = useState<string | null>(null)
+  const [listsError, setListsError] = useState<string | null>(null)
+  const [agentsError, setAgentsError] = useState<string | null>(null)
+  const [isRefreshingAutomations, setIsRefreshingAutomations] = useState(false)
   
   // Form fields
   const [automationName, setAutomationName] = useState("")
@@ -104,68 +122,130 @@ export function Automations() {
     { value: 'messenger', label: 'Messenger', icon: Facebook }
   ]
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
   
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,
     ...(includeContentType && { 'Content-Type': 'application/json' })
   })
 
+  const persistAutomations = (items: Automation[]) => {
+    setAutomations(items)
+    writeJsonCache(AUTOMATIONS_CACHE_KEY, items)
+    const now = new Date()
+    writeJsonCache(AUTOMATIONS_META_CACHE_KEY, { lastSync: now.toISOString() })
+    setLastAutomationsSync(now.toLocaleTimeString())
+  }
+
+  const persistLists = (lists: SavedList[]) => {
+    setSavedLists(lists)
+    writeJsonCache(AUTOMATION_LISTS_CACHE_KEY, lists)
+  }
+
+  const persistAgents = (agentsList: any[]) => {
+    setAgents(agentsList)
+    writeJsonCache(AUTOMATION_AGENTS_CACHE_KEY, agentsList)
+  }
+
+  type LoadAutomationsOptions = {
+    silent?: boolean
+  }
+
   useEffect(() => {
+    if (!accessToken) return
     loadAutomations()
     loadSavedLists()
     loadAgents()
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
 
-  const loadAutomations = async () => {
+  const loadAutomations = async (options: LoadAutomationsOptions = {}) => {
+    if (!accessToken) return
     try {
-      setLoading(true)
-      const response = await fetch(`${baseUrl}/automations`, {
-        headers: getHeaders()
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        setAutomations(data.automations || [])
+      if (!options.silent && automations.length === 0) {
+        setLoading(true)
       }
+      setIsRefreshingAutomations(true)
+      const response = await safeFetch(`${baseUrl}/automations`, {
+        headers: getHeaders()
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        setAutomationError('Tempo limite ao atualizar automações')
+        return
+      }
+
+      if (!response.ok) {
+        setAutomationError('Erro ao atualizar automações')
+        return
+      }
+
+      const data = await response.json()
+      persistAutomations(data.automations || [])
+      setAutomationError(null)
     } catch (error) {
       console.error('Error loading automations:', error)
-      toast.error('Erro ao carregar automações')
+      setAutomationError('Erro ao carregar automações')
     } finally {
-      setLoading(false)
+      if (!options.silent) {
+        setLoading(false)
+      }
+      setIsRefreshingAutomations(false)
     }
   }
 
   const loadSavedLists = async () => {
+    if (!accessToken) return
     try {
-      setLoadingLists(true)
-      const response = await fetch(`${baseUrl}/lists`, {
+      if (savedLists.length === 0) setLoadingLists(true)
+      const response = await safeFetch(`${baseUrl}/lists`, {
         headers: getHeaders()
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        const data = await response.json()
-        setSavedLists(data.lists || [])
+      if (!response) {
+        setListsError('Tempo limite ao carregar listas')
+        return
       }
+
+      if (!response.ok) {
+        setListsError('Erro ao carregar listas')
+        return
+      }
+
+      const data = await response.json()
+      persistLists(data.lists || [])
+      setListsError(null)
     } catch (error) {
       console.error('Error loading lists:', error)
+      setListsError('Erro ao carregar listas')
     } finally {
       setLoadingLists(false)
     }
   }
 
   const loadAgents = async () => {
+    if (!accessToken) return
     try {
-      const response = await fetch(`${baseUrl}/agents`, {
+      const response = await safeFetch(`${baseUrl}/agents`, {
         headers: getHeaders()
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
 
-      if (response.ok) {
-        const data = await response.json()
-        setAgents(data.agents || [])
+      if (!response) {
+        setAgentsError('Tempo limite ao carregar agentes')
+        return
       }
+
+      if (!response.ok) {
+        setAgentsError('Erro ao carregar agentes')
+        return
+      }
+
+      const data = await response.json()
+      persistAgents(data.agents || [])
+      setAgentsError(null)
     } catch (error) {
       console.error('Error loading agents:', error)
+      setAgentsError('Erro ao carregar agentes')
     }
   }
 
@@ -212,7 +292,7 @@ export function Automations() {
     try {
       const selectedList = savedLists.find(l => l.id === selectedListId)
       
-      const response = await fetch(`${baseUrl}/automations`, {
+      const response = await safeFetch(`${baseUrl}/automations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -231,15 +311,21 @@ export function Automations() {
           followUpMessage,
           status: 'draft'
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        toast.error('Tempo limite ao criar automação')
+        return
+      }
 
       if (response.ok) {
-        await loadAutomations()
+        await loadAutomations({ silent: true })
         setShowNewAutomationDialog(false)
         resetForm()
         toast.success('Automação criada!')
       } else {
-        toast.error('Erro ao criar automação')
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData?.message || 'Erro ao criar automação')
       }
     } catch (error) {
       console.error('Error creating automation:', error)
@@ -251,15 +337,20 @@ export function Automations() {
     if (!confirm('Tem certeza que deseja excluir esta automação?')) return
 
     try {
-      const response = await fetch(`${baseUrl}/automations/${id}`, {
+      const response = await safeFetch(`${baseUrl}/automations/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        toast.error('Tempo limite ao excluir automação')
+        return
+      }
 
       if (response.ok) {
-        await loadAutomations()
+        await loadAutomations({ silent: true })
         toast.success('Automação excluída!')
       } else {
         toast.error('Erro ao excluir automação')
@@ -274,7 +365,7 @@ export function Automations() {
     const newStatus = automation.status === 'active' ? 'paused' : 'active'
     
     try {
-      const response = await fetch(`${baseUrl}/automations/${automation.id}`, {
+      const response = await safeFetch(`${baseUrl}/automations/${automation.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -283,10 +374,15 @@ export function Automations() {
         body: JSON.stringify({
           status: newStatus
         })
-      })
+      }, { timeout: FETCH_DEFAULT_TIMEOUT })
+
+      if (!response) {
+        toast.error('Tempo limite ao atualizar status')
+        return
+      }
 
       if (response.ok) {
-        await loadAutomations()
+        await loadAutomations({ silent: true })
         toast.success(`Automação ${newStatus === 'active' ? 'ativada' : 'pausada'}!`)
       } else {
         toast.error('Erro ao atualizar status')
@@ -322,17 +418,11 @@ export function Automations() {
     setSelectedAutomation(null)
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    )
-  }
-
   const totalExecutions = automations.reduce((sum, a) => sum + a.executionsTotal, 0)
   const totalLists = automations.reduce((sum, a) => sum + a.listsGenerated, 0)
   const totalCampaigns = automations.reduce((sum, a) => sum + a.campaignsSent, 0)
+
+  const showStatusInfo = loading || isRefreshingAutomations || lastAutomationsSync || automationError
 
   return (
     <div className="h-full overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
@@ -341,20 +431,64 @@ export function Automations() {
         {/* Header */}
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
+            {showStatusInfo && (
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground mb-1">
+                {loading && !isRefreshingAutomations && (
+                  <span className="flex items-center gap-1 text-blue-600">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Preparando automações...
+                  </span>
+                )}
+                {isRefreshingAutomations && (
+                  <span className="flex items-center gap-1 text-blue-600">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Atualizando automações...
+                  </span>
+                )}
+                {lastAutomationsSync && (
+                  <span>Última atualização: {lastAutomationsSync}</span>
+                )}
+                {automationError && (
+                  <span className="text-amber-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {automationError}
+                  </span>
+                )}
+              </div>
+            )}
             <h1 className="text-2xl sm:text-3xl">Automações</h1>
             <p className="text-muted-foreground">
               Fluxos automáticos completos de geração de leads até campanhas
             </p>
           </div>
           
-          <Dialog open={showNewAutomationDialog} onOpenChange={setShowNewAutomationDialog}>
-            <DialogTrigger asChild>
-              <Button onClick={() => resetForm()}>
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Automação
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={() => loadAutomations({ silent: true })}
+              disabled={isRefreshingAutomations}
+              className="gap-2"
+            >
+              {isRefreshingAutomations ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Atualizando
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Atualizar
+                </>
+              )}
+            </Button>
+            <Dialog open={showNewAutomationDialog} onOpenChange={setShowNewAutomationDialog}>
+              <DialogTrigger asChild>
+                <Button onClick={() => resetForm()}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nova Automação
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Criar Nova Automação</DialogTitle>
                 <DialogDescription>
@@ -423,6 +557,12 @@ export function Automations() {
                         </SelectContent>
                       </Select>
                     )}
+                    {listsError && (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {listsError}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -456,6 +596,12 @@ export function Automations() {
                           ))}
                         </SelectContent>
                       </Select>
+                    )}
+                    {agentsError && (
+                      <p className="text-xs text-amber-600 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3" />
+                        {agentsError}
+                      </p>
                     )}
                   </div>
                 </div>
@@ -607,7 +753,7 @@ export function Automations() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card>
+          <Card className="h-full">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -619,7 +765,7 @@ export function Automations() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-full">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -631,7 +777,7 @@ export function Automations() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-full">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -643,7 +789,7 @@ export function Automations() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="h-full">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
@@ -771,5 +917,6 @@ export function Automations() {
         )}
       </div>
     </div>
-  )
+  </div>
+)
 }

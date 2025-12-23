@@ -24,6 +24,7 @@ import { Avatar, AvatarFallback } from "./ui/avatar"
 import { Badge } from "./ui/badge"
 import { toast } from "sonner"
 import { useAuth } from "../hooks/useAuthLaravel"
+import { getApiUrl } from '../utils/apiConfig'
 
 type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost'
 
@@ -111,7 +112,7 @@ export function LeadDetailPage({ leadId, onBack }: LeadDetailPageProps) {
   const [newNote, setNewNote] = useState('')
   const [savingProduct, setSavingProduct] = useState(false)
 
-  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
 
   const getHeaders = (includeContentType = false) => ({
     'Authorization': `Bearer ${accessToken}`,

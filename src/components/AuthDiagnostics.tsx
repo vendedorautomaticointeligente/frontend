@@ -13,9 +13,10 @@ import {
   Database,
   Shield
 } from "lucide-react"
+import { getApiUrl } from '../utils/apiConfig'
 
 export function AuthDiagnostics() {
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
   
   const [status, setStatus] = useState<{
     checking: boolean

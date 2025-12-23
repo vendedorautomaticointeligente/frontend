@@ -2,7 +2,7 @@
 
 ## 🎯 Sistema SaaS 100% Funcional com Dados Reais
 
-Sistema completo de vendas automatizadas com IA, desenvolvido com React, TypeScript, Tailwind CSS e Supabase.
+Sistema completo de vendas automatizadas com IA, desenvolvido com React, TypeScript, Tailwind CSS e Backend SQLite/PostgreSQL.
 
 > ⚠️ **IMPORTANTE**: Este sistema trabalha APENAS com dados reais. Sem dados fictícios, sem demonstrações mock. 100% pronto para produção.
 
@@ -175,7 +175,7 @@ Podemos agendar uma conversa de 15 minutos?
   - OpenAI (para IA e estratégias)
   - HasData (para dados de empresas)
   - Mascaramento de chaves (segurança)
-  - Salvamento no Supabase + backup local
+  - Salvamento no Backend SQLite/PostgreSQL + backup local
 - 👥 Gerenciamento de Usuários
 - 📊 Estatísticas do Sistema
 - 🔍 Diagnóstico de Conexão
@@ -188,9 +188,9 @@ Podemos agendar uma conversa de 15 minutos?
 ### Stack
 - **Frontend**: React 18 + TypeScript + Tailwind CSS v4
 - **UI Components**: Shadcn/ui
-- **Backend**: Supabase Edge Functions (Deno + Hono)
-- **Database**: Supabase PostgreSQL (kv_store)
-- **Auth**: Supabase Auth (JWT)
+- **Backend**: Backend SQLite/PostgreSQL Edge Functions (Deno + Hono)
+- **Database**: Backend SQLite/PostgreSQL PostgreSQL (kv_store)
+- **Auth**: Backend SQLite/PostgreSQL Auth (JWT)
 - **APIs Externas**:
   - HasData API (dados empresariais reais)
   - OpenAI API (processamento de linguagem)
@@ -208,12 +208,12 @@ Podemos agendar uma conversa de 15 minutos?
 │   └── ui/                     # Componentes Shadcn
 ├── hooks/
 │   └── useAuth.tsx             # Autenticação
-├── supabase/functions/server/
+├── backend/functions/server/
 │   ├── index.tsx               # API principal
 │   ├── api-integrations.tsx   # HasData + OpenAI
 │   └── kv_store.tsx            # Storage (protegido)
-├── utils/supabase/
-│   ├── client.tsx              # Cliente Supabase
+├── utils/backend/
+│   ├── client.tsx              # Cliente Backend SQLite/PostgreSQL
 │   └── info.tsx                # Configurações (protegido)
 └── docs/
     ├── PRODUCTION_RULES.md     # Regras do sistema
@@ -227,7 +227,7 @@ Podemos agendar uma conversa de 15 minutos?
 ## 🔒 Segurança
 
 ### Autenticação
-- Supabase Auth com JWT tokens
+- Backend SQLite/PostgreSQL Auth com JWT tokens
 - Senha criptografada
 - Email auto-confirmado (sem servidor de email necessário)
 - Session management automático
@@ -241,7 +241,7 @@ Podemos agendar uma conversa de 15 minutos?
 
 ### Armazenamento de Chaves
 ```
-Primário: Supabase kv_store_73685931
+Primário: Backend SQLite/PostgreSQL kv_store_73685931
   ├─ openai_api_key
   └─ hasdata_api_key
 
@@ -298,7 +298,7 @@ Este sistema é **100% focado em dados reais**:
 
 ## 🔑 Variáveis de Ambiente
 
-**Pré-configuradas** (Supabase):
+**Pré-configuradas** (Backend SQLite/PostgreSQL):
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`

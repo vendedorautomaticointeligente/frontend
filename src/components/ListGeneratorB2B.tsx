@@ -41,6 +41,7 @@ import {
   ArrowDown,
   Pencil
 } from "lucide-react"
+import { getApiUrl } from "../utils/apiConfig"
 
 // Type assertion for Button with variant and size props
 const Button = BaseButton as any
@@ -190,7 +191,7 @@ export function ListGeneratorB2B() {
 
   // Save contacts state - REMOVED: contacts now auto-saved by backend on generation
 
-  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+  const baseUrl = getApiUrl()
 
   const apiCall = async (endpoint: string, options: RequestInit = {}) => {
     const url = `${baseUrl}${endpoint}`

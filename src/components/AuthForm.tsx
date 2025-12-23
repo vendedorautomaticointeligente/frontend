@@ -11,7 +11,7 @@ import { Zap, Loader2, AlertCircle, Mail, Lock, User, Building, HelpCircle } fro
 import { toast } from "sonner"
 
 export function AuthForm() {
-  const { signIn, signUp, loading } = useAuth()
+  const { signIn, signUp, loading, loginState } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -116,7 +116,8 @@ export function AuthForm() {
                       placeholder="seu@email.com"
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
-                      disabled={loading}
+                      disabled={loading || loginState.loading}
+                      autoComplete="email"
                       className="h-11"
                     />
                   </div>
@@ -132,7 +133,8 @@ export function AuthForm() {
                       placeholder="••••••••"
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
-                      disabled={loading}
+                      disabled={loading || loginState.loading}
+                      autoComplete="current-password"
                       className="h-11"
                     />
                   </div>
@@ -165,16 +167,22 @@ export function AuthForm() {
                     </div>
                   )}
                   
-                  <Button type="submit" className="w-full h-11" disabled={loading}>
-                    {loading ? (
+                  <Button type="submit" className="w-full h-11" disabled={loading || loginState.loading}>
+                    {loading || loginState.loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Entrando...
+                        {loginState.status ?? (loginState.loading ? 'Conectando...' : 'Entrando...')}
                       </>
                     ) : (
                       'Entrar'
                     )}
                   </Button>
+
+                  {loginState.error && (
+                    <div className="text-xs text-amber-600 text-center">
+                      {loginState.error}
+                    </div>
+                  )}
                 </form>
               </TabsContent>
               

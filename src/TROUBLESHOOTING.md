@@ -4,12 +4,12 @@
 
 ### ❌ Erro: "Failed to fetch" ou "TypeError: Failed to fetch"
 
-Este erro indica problema de conectividade com os serviços do Supabase.
+Este erro indica problema de conectividade com os serviços do Backend SQLite/PostgreSQL.
 
 **Causas Comuns:**
 - Sem conexão com a internet
 - Firewall bloqueando requisições
-- Serviço do Supabase temporariamente indisponível
+- Serviço do Backend SQLite/PostgreSQL temporariamente indisponível
 - Problema de CORS (menos comum)
 
 **Soluções:**
@@ -29,8 +29,8 @@ Este erro indica problema de conectividade com os serviços do Supabase.
 
 4. **Verificar firewall e antivírus**
    - Desative temporariamente bloqueadores de anúncios
-   - Verifique se o firewall está bloqueando `*.supabase.co`
-   - Adicione exceção para `kywyfamhpztusteuxscp.supabase.co`
+   - Verifique se o firewall está bloqueando `*.backend.co`
+   - Adicione exceção para `kywyfamhpztusteuxscp.backend.co`
 
 5. **Aguardar e tentar novamente**
    - Edge Functions podem ter "cold start" (5-10 segundos)
@@ -38,7 +38,7 @@ Este erro indica problema de conectividade com os serviços do Supabase.
 
 ### ❌ Erro: "AuthRetryableFetchError"
 
-Este erro é específico de problemas de autenticação do Supabase.
+Este erro é específico de problemas de autenticação do Backend SQLite/PostgreSQL.
 
 **Soluções:**
 
@@ -69,8 +69,8 @@ A Edge Function não está acessível.
    - A Edge Function pode não estar deployada
    - Contate o administrador do sistema
 
-3. **Verificar status do Supabase**
-   - Acesse: https://status.supabase.com
+3. **Verificar status do Backend SQLite/PostgreSQL**
+   - Acesse: https://status.backend.com
    - Verifique se há incidentes reportados
 
 ### 🔐 Erro de Autenticação (401)
@@ -117,21 +117,21 @@ Token de acesso inválido ou expirado.
 
 Abra uma nova aba e teste estas URLs:
 
-1. **API Supabase:**
+1. **API Backend SQLite/PostgreSQL:**
    ```
-   https://kywyfamhpztusteuxscp.supabase.co/rest/v1/
+   https://kywyfamhpztusteuxscp.backend.co/rest/v1/
    ```
    Deve retornar 404 ou resposta JSON
 
 2. **Edge Function Ping:**
    ```
-   https://kywyfamhpztusteuxscp.supabase.co/functions/v1/make-server-73685931/ping
+   https://kywyfamhpztusteuxscp.backend.co/functions/v1/make-server-73685931/ping
    ```
    Deve retornar JSON com status "online"
 
 3. **Admin User Creation:**
    ```
-   https://kywyfamhpztusteuxscp.supabase.co/functions/v1/make-server-73685931/create-admin
+   https://kywyfamhpztusteuxscp.backend.co/functions/v1/make-server-73685931/create-admin
    ```
    Deve retornar JSON confirmando criação
 
@@ -141,7 +141,7 @@ Abra uma nova aba e teste estas URLs:
 
 - Na tela de login, clique em "Diagnóstico de Conexão"
 - Mostra status de:
-  - API Supabase
+  - API Backend SQLite/PostgreSQL
   - Edge Function
   - Usuário Admin
 
@@ -162,7 +162,7 @@ Abra uma nova aba e teste estas URLs:
 
 O sistema usa estas variáveis (já configuradas automaticamente):
 
-- `SUPABASE_URL`: https://kywyfamhpztusteuxscp.supabase.co
+- `SUPABASE_URL`: https://kywyfamhpztusteuxscp.backend.co
 - `SUPABASE_ANON_KEY`: eyJhbGciOiJI... (chave pública)
 - `SUPABASE_SERVICE_ROLE_KEY`: (apenas no servidor)
 
@@ -196,7 +196,7 @@ Se nenhuma solução funcionou:
 
 3. **Informações úteis para debug:**
    - Project ID: kywyfamhpztusteuxscp
-   - URL Base: https://kywyfamhpztusteuxscp.supabase.co
+   - URL Base: https://kywyfamhpztusteuxscp.backend.co
    - Edge Function: /functions/v1/make-server-73685931
 
 ### Comandos de Debug Rápido
@@ -205,7 +205,7 @@ Cole no Console do navegador (F12):
 
 ```javascript
 // Testar conectividade
-fetch('https://kywyfamhpztusteuxscp.supabase.co/functions/v1/make-server-73685931/ping')
+fetch('https://kywyfamhpztusteuxscp.backend.co/functions/v1/make-server-73685931/ping')
   .then(r => r.json())
   .then(d => console.log('✅ Ping OK:', d))
   .catch(e => console.error('❌ Ping Error:', e))
@@ -225,7 +225,7 @@ console.log('Local Storage:', {
 ## Changelog de Correções
 
 ### v4.0 - Melhorias de Conectividade
-- ✅ Adicionado timeout de 15s em requisições Supabase
+- ✅ Adicionado timeout de 15s em requisições Backend SQLite/PostgreSQL
 - ✅ Melhorado tratamento de erros de conexão
 - ✅ Adicionado componente de diagnóstico de autenticação
 - ✅ Implementado ConnectionStatus no painel admin

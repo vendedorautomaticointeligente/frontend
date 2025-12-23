@@ -3,6 +3,7 @@ import { Plus, Check, Loader, Trash2, QrCode } from "lucide-react"
 import { Button } from "./ui/button"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
+import { getApiUrl } from '../utils/apiConfig'
 
 type Connection = {
   id: string
@@ -16,7 +17,7 @@ type Connection = {
 
 export default function IntegrationsPage() {
   const { accessToken } = useAuth()
-  const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api"
+  const baseUrl = getApiUrl()
 
   const [connections, setConnections] = useState<Connection[]>([])
   const [loading, setLoading] = useState(true)
@@ -25,6 +26,43 @@ export default function IntegrationsPage() {
   const [selectedConnectionId, setSelectedConnectionId] = useState<string | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
   const [pollAbort, setPollAbort] = useState<AbortController | null>(null)
+  const [showClearCacheButton, setShowClearCacheButton] = useState(false)
+
+  // Limpar cache de integrações
+  const clearIntegrationsCache = () => {
+    if (!confirm("Limpar TODO o cache de integrações? A página será recarregada.")) return
+    
+    const keysToRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i)
+      if (key && (
+        key.includes('integration') || 
+        key.includes('connection') || 
+        key.includes('whatsapp')
+      )) {
+        keysToRemove.push(key)
+      }
+    }
+
+    keysToRemove.forEach(key => localStorage.removeItem(key))
+    toast.success(`✅ ${keysToRemove.length} cache(s) removido(s). Recarregando...`)
+    setTimeout(() => window.location.reload(), 1500)
+  }
+
+  // Verificar se há cache de integrações antigo
+  useEffect(() => {
+    const cached = localStorage.getItem('integrations_whatsapp_connections')
+    if (cached) {
+      try {
+        const data = JSON.parse(cached)
+        if (Array.isArray(data) && data.length > 0 && connections.length === 0) {
+          setShowClearCacheButton(true)
+        }
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+  }, [connections])
 
   // Carregar conexões
   useEffect(() => {
@@ -215,7 +253,7 @@ export default function IntegrationsPage() {
         </div>
 
         {/* Connect Button */}
-        <div className="mb-8">
+        <div className="mb-8 flex gap-2">
           <Button
             onClick={handleConnectWhatsApp}
             disabled={connecting}
@@ -233,6 +271,18 @@ export default function IntegrationsPage() {
               </>
             )}
           </Button>
+
+          {/* Debug: Limpar Cache */}
+          {showClearCacheButton && (
+            <Button
+              onClick={clearIntegrationsCache}
+              className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-3 rounded-lg flex items-center gap-2 font-semibold"
+              title="Cache antigo detectado. Clique para limpar."
+            >
+              <Trash2 className="w-5 h-5" />
+              Limpar Cache
+            </Button>
+          )}
         </div>
 
         {/* QR Code Modal */}

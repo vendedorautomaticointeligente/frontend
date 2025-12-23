@@ -156,7 +156,7 @@ A chave RapidAPI que dá acesso à API HasData para extração de perfis do Inst
 4. Cole no Painel Admin
 
 ### **Prioridade de Uso:**
-1. **Primeira opção:** Chave configurada no Painel Admin (Supabase KV)
+1. **Primeira opção:** Chave configurada no Painel Admin (Backend SQLite/PostgreSQL KV)
 2. **Fallback:** Variável de ambiente `RAPIDAPI_KEY`
 
 ## 📝 Checklist de Troubleshooting

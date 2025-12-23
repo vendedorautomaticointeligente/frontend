@@ -95,7 +95,7 @@ Adicionado `.trim()` nas validações dos campos obrigatórios para remover espa
 
 ### Estrutura Atual vs. Necessária
 
-#### Backend Atual (`/supabase/functions/server/index.tsx`)
+#### Backend Atual (`/backend/functions/server/index.tsx`)
 ```javascript
 // Linha 1522 - IMPLEMENTAÇÃO MOCK
 if (cleanPath === '/generate-social-leads' && method === 'POST') {
@@ -241,7 +241,7 @@ Loop até atingir meta:
 ## 🔐 CONSIDERAÇÕES DE SEGURANÇA
 
 - Nunca expor API keys no frontend
-- Armazenar credenciais no Supabase Secrets
+- Armazenar credenciais no Backend SQLite/PostgreSQL Secrets
 - Implementar rate limiting por usuário
 - Validar e sanitizar todos os inputs
 - Respeitar robots.txt e termos de serviço

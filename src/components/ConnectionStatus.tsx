@@ -3,6 +3,8 @@ import { Button } from "./ui/button"
 import { Badge } from "./ui/badge"
 import { Alert, AlertDescription } from "./ui/alert"
 import { Wifi, WifiOff, Activity, AlertTriangle, Loader2, Bug, RefreshCw } from "lucide-react"
+import { fetchWithTimeout, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
+import { getApiUrl } from '../utils/apiConfig'
 
 interface ConnectionStatusProps {
   accessToken?: string | null
@@ -26,26 +28,20 @@ export function ConnectionStatus({ accessToken }: ConnectionStatusProps) {
     try {
       setStatus(prev => ({ ...prev, state: 'loading', message: 'Verificando...' }))
       
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
+      const baseUrl = getApiUrl()
       const pingUrl = `${baseUrl}/ping`
       console.log('🔄 Testing connection to:', pingUrl)
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 8000)
-
       try {
         console.log('📡 Making ping request...')
-        const response = await fetch(pingUrl, {
+        const response = await fetchWithTimeout(pingUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
             ...(accessToken && { 'Authorization': `Bearer ${accessToken}` })
-          },
-          signal: controller.signal
-        })
-
-        clearTimeout(timeoutId)
+          }
+        }, { timeout: FETCH_DEFAULT_TIMEOUT })
         
         console.log('📡 Response status:', response.status)
         
@@ -105,7 +101,6 @@ export function ConnectionStatus({ accessToken }: ConnectionStatusProps) {
         }
 
       } catch (fetchError: any) {
-        clearTimeout(timeoutId)
         console.error('❌ Connection test failed:', fetchError)
 
         const debugInfo = {
@@ -314,7 +309,7 @@ Resolution Steps:
           variant="secondary"
           className="text-xs"
         >
-          Edge Functions
+          Laravel API
         </Badge>
       </div>
       
