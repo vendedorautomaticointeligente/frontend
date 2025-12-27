@@ -18,7 +18,8 @@ import {
   Calendar,
   Users,
   Target,
-  Zap
+  Zap,
+  RefreshCw
 } from "lucide-react"
 import { StatsOverview } from "./StatsOverview"
 import { SuccessFailureChart } from "./SuccessFailureChart"
@@ -81,6 +82,7 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
   const [logs, setLogs] = useState<CampaignLog[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingLogs, setLoadingLogs] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [activeTab, setActiveTab] = useState<'overview' | 'timeline' | 'logs' | 'errors'>('overview')
   const [timelinePeriod, setTimelinePeriod] = useState<'1h' | '24h' | '7d' | '30d'>('24h')
 
@@ -112,15 +114,41 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
 
       if (response.ok) {
         const data = await response.json()
+        console.log('Stats loaded:', data)
         setStats(data)
       } else {
-        toast.error('Erro ao carregar estatísticas')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Stats error response:', errorData)
+        toast.error(errorData.error || 'Erro ao carregar estatísticas')
       }
     } catch (error) {
       console.error('Error loading stats:', error)
-      toast.error('Erro ao carregar estatísticas')
+      toast.error('Erro ao carregar estatísticas: ' + (error as Error).message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    setStats(null)
+    try {
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/stats`, {
+        headers: getHeaders()
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setStats(data)
+        toast.success('Estatísticas atualizadas!')
+      } else {
+        toast.error('Erro ao atualizar estatísticas')
+      }
+    } catch (error) {
+      console.error('Error refreshing stats:', error)
+      toast.error('Erro ao atualizar estatísticas')
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -135,11 +163,12 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
         const data = await response.json()
         setLogs(data.logs || [])
       } else {
-        toast.error('Erro ao carregar logs detalhados')
+        const errorData = await response.json().catch(() => ({}))
+        toast.error(errorData.error || 'Erro ao carregar logs detalhados')
       }
     } catch (error) {
       console.error('Error loading logs:', error)
-      toast.error('Erro ao carregar logs detalhados')
+      toast.error('Erro ao carregar logs detalhados: ' + (error as Error).message)
     } finally {
       setLoadingLogs(false)
     }
@@ -174,8 +203,9 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-500'
+      case 'active': return 'bg-blue-500'
       case 'running': return 'bg-blue-500'
-      case 'paused': return 'bg-yellow-500'
+      case 'paused': return 'bg-gray-500'
       case 'scheduled': return 'bg-gray-500'
       default: return 'bg-gray-400'
     }
@@ -244,6 +274,15 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
             <Badge className={getStatusColor(stats.campaign.status)}>
               {getStatusLabel(stats.campaign.status)}
             </Badge>
+            <Button 
+              onClick={handleRefresh} 
+              variant="outline" 
+              size="sm"
+              disabled={refreshing}
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+              {refreshing ? 'Atualizando...' : 'Atualizar'}
+            </Button>
             <Button onClick={exportLogs} variant="outline" size="sm">
               <Download className="w-4 h-4 mr-2" />
               Exportar CSV
@@ -253,37 +292,56 @@ export function CampaignStatsPage({ campaignId, onBack }: CampaignStatsPageProps
 
         {/* Campaign Info */}
         <Card>
-          <CardContent className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="flex items-center gap-3">
-                <Users className="w-5 h-5 text-blue-500" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Total de Contatos</p>
-                  <p className="text-2xl font-bold">{stats.campaign.total_contacts}</p>
+          <CardContent className="p-6 space-y-4">
+            {/* Status da Pausa */}
+            {!stats.campaign.is_active && stats.campaign.paused_at && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-yellow-800">📋 Campanha Pausada</p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Parada em: {new Date(stats.campaign.paused_at).toLocaleString('pt-BR')}
+                    </p>
+                    {stats.campaign.paused_at_contact_index !== null && (
+                      <p className="text-xs text-yellow-700">
+                        Parada no contato #{stats.campaign.paused_at_contact_index + 1}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Target className="w-5 h-5 text-green-500" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Taxa de Sucesso</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.summary.success_rate}%</p>
+            )}
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground font-medium">Total de Contatos</p>
+                  <Users className="w-5 h-5 text-blue-500" />
                 </div>
+                <p className="text-3xl font-bold text-blue-700">{stats.campaign.total_contacts}</p>
               </div>
-              <div className="flex items-center gap-3">
-                <MessageSquare className="w-5 h-5 text-purple-500" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Respostas</p>
-                  <p className="text-2xl font-bold text-purple-600">{stats.summary.response_rate}</p>
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground font-medium">Taxa de Sucesso</p>
+                  <Target className="w-5 h-5 text-green-500" />
                 </div>
+                <p className="text-3xl font-bold text-green-700">{stats.summary.success_rate}%</p>
               </div>
-              <div className="flex items-center gap-3">
-                <Clock className="w-5 h-5 text-orange-500" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Tempo Médio</p>
-                  <p className="text-2xl font-bold text-orange-600">
-                    {stats.summary.avg_response_time ? `${stats.summary.avg_response_time}ms` : 'N/A'}
-                  </p>
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground font-medium">Taxa de Respostas</p>
+                  <MessageSquare className="w-5 h-5 text-purple-500" />
                 </div>
+                <p className="text-3xl font-bold text-purple-700">{stats.summary.response_rate}%</p>
+              </div>
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm text-muted-foreground font-medium">Tempo Médio Resp.</p>
+                  <Clock className="w-5 h-5 text-orange-500" />
+                </div>
+                <p className="text-3xl font-bold text-orange-700">
+                  {stats.summary.avg_response_time ? `${stats.summary.avg_response_time}s` : 'N/A'}
+                </p>
               </div>
             </div>
           </CardContent>

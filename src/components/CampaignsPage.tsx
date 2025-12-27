@@ -108,19 +108,23 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'active': return 'bg-blue-500'
+      case 'running': return 'bg-blue-500'
+      case 'completed': return 'bg-green-500'
+      case 'paused': return 'bg-gray-500'
       case 'scheduled': return 'bg-blue-500'
-      case 'running': return 'bg-green-500'
-      case 'paused': return 'bg-yellow-500'
-      case 'completed': return 'bg-gray-500'
+      case 'draft': return 'bg-gray-500'
       default: return 'bg-gray-400'
     }
   }
 
   const getStatusLabel = (status: string) => {
     switch (status) {
+      case 'active': return 'Ativa'
       case 'scheduled': return 'Agendada'
       case 'running': return 'Em Execução'
       case 'paused': return 'Pausada'
+      case 'draft': return 'Rascunho'
       case 'completed': return 'Concluída'
       default: return status
     }
@@ -197,24 +201,6 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
     }
   }
 
-  const pauseCampaign = async (campaignId: string) => {
-    try {
-      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/pause`, {
-        method: 'POST',
-        headers: getHeaders(true)
-      })
-
-      if (response.ok) {
-        await loadCampaigns()
-        toast.success('Campanha pausada!')
-      } else {
-        toast.error('Erro ao pausar campanha')
-      }
-    } catch (error) {
-      console.error('Error pausing campaign:', error)
-      toast.error('Erro ao pausar campanha')
-    }
-  }
 
   const stopCampaign = async (campaignId: string) => {
     try {
@@ -232,6 +218,32 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
     } catch (error) {
       console.error('Error stopping campaign:', error)
       toast.error('Erro ao parar campanha')
+    }
+  }
+
+  const pauseCampaign = async (campaignId: string) => {
+    try {
+      console.log('🔸 Pausando campanha:', campaignId)
+      const response = await fetch(`${baseUrl}/campaigns/${campaignId}/pause`, {
+        method: 'POST',
+        headers: getHeaders(true)
+      })
+
+      console.log('🔸 Response status:', response.status)
+      
+      if (response.ok) {
+        const data = await response.json()
+        console.log('✅ Campanha pausada com sucesso:', data)
+        await loadCampaigns()
+        toast.success('Campanha pausada!')
+      } else {
+        const error = await response.json()
+        console.error('❌ Erro ao pausar:', error)
+        toast.error(error.message || 'Erro ao pausar campanha')
+      }
+    } catch (error) {
+      console.error('Error pausing campaign:', error)
+      toast.error('Erro ao pausar campanha')
     }
   }
 
@@ -380,17 +392,6 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
                             Pausar
                           </Button>
                         )}
-                        {campaign.is_active && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => stopCampaign(campaign.id)}
-                            className="text-red-600"
-                          >
-                            <Pause className="w-4 h-4 mr-1" />
-                            Parar
-                          </Button>
-                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -462,25 +463,6 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
                         } 
                         className="h-2" 
                       />
-                    </div>
-
-                    <div className="grid grid-cols-4 gap-4 text-center text-sm">
-                      <div>
-                        <p className="text-muted-foreground">Enviadas</p>
-                        <p className="font-bold text-lg">{campaign.sent}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Entregues</p>
-                        <p className="font-bold text-lg text-blue-600">{campaign.delivered}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Abertas</p>
-                        <p className="font-bold text-lg text-purple-600">{campaign.opened}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground">Respostas</p>
-                        <p className="font-bold text-lg text-green-600">{campaign.replied}</p>
-                      </div>
                     </div>
                   </CardContent>
                 </Card>
