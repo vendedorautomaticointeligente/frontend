@@ -48,6 +48,10 @@ export function ConversationsPage() {
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
 
+  // STATE - Filtro por instância (NOVO)
+  const [selectedInstance, setSelectedInstance] = useState<string>('') // '' = todas as instâncias
+  const [availableInstances, setAvailableInstances] = useState<string[]>([])
+
   // STATE - Loading/UI
   const [loading, setLoading] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
@@ -336,6 +340,29 @@ export function ConversationsPage() {
   }, [accessToken, baseUrl])
 
   // ============================================================================
+  // FUNÇÃO 1B: Atualizar instâncias disponíveis (NOVO)
+  // ============================================================================
+
+  useEffect(() => {
+    if (conversations.length > 0) {
+      // Extrair instâncias únicas, filtrando vazias
+      const instances = Array.from(
+        new Set(
+          conversations
+            .map(c => c.whatsapp_instance_name)
+            .filter(instance => instance && instance.trim() !== '')
+        )
+      ).sort()
+
+      console.log('📱 Instâncias disponíveis:', instances)
+      setAvailableInstances(instances)
+
+      // Se conversas foram recarregadas, resetar instância selecionada para "Todas"
+      setSelectedInstance('')
+    }
+  }, [conversations])
+
+  // ============================================================================
   // FUNÇÃO 2: Carregar Mensagens da Conversa
   // ============================================================================
 
@@ -478,10 +505,16 @@ export function ConversationsPage() {
   // RENDER: Lista de Conversas
   // ============================================================================
 
-  const filteredConversations = conversations.filter(c =>
-    c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone_number.includes(searchQuery)
-  )
+  const filteredConversations = conversations.filter(c => {
+    // Filtro de busca
+    const matchesSearch = c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone_number.includes(searchQuery)
+
+    // Filtro de instância (NOVO)
+    const matchesInstance = selectedInstance === '' || c.whatsapp_instance_name === selectedInstance
+
+    return matchesSearch && matchesInstance
+  })
 
   if (!accessToken) {
     return (
@@ -514,6 +547,47 @@ export function ConversationsPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Conversations List - ESTREITA */}
         <div className="w-64 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg overflow-hidden flex-shrink-0">
+          {/* Instance Tabs - NOVO */}
+          {availableInstances.length > 1 && (
+            <div className="flex-shrink-0 border-b border-gray-200/60 bg-gradient-to-r from-white/90 to-blue-50/50">
+              <div className="flex gap-1 overflow-x-auto p-2 scrollbar-hide">
+                {/* Tab: Todas as instâncias */}
+                <button
+                  onClick={() => setSelectedInstance('')}
+                  className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
+                    selectedInstance === ''
+                      ? 'bg-blue-500 text-white'
+                      : 'bg-gray-200/50 text-gray-700 hover:bg-gray-300/50'
+                  }`}
+                >
+                  📱 Todas ({conversations.length})
+                </button>
+
+                {/* Tabs: Uma por instância */}
+                {availableInstances.map((instance) => {
+                  const instanceConvCount = conversations.filter(
+                    c => c.whatsapp_instance_name === instance
+                  ).length
+                  
+                  return (
+                    <button
+                      key={instance}
+                      onClick={() => setSelectedInstance(instance)}
+                      className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
+                        selectedInstance === instance
+                          ? 'bg-blue-500 text-white'
+                          : 'bg-gray-200/50 text-gray-700 hover:bg-gray-300/50'
+                      }`}
+                      title={`${instance} - ${instanceConvCount} conversas`}
+                    >
+                      📱 {instance.substring(0, 15)}... ({instanceConvCount})
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Search */}
           <div className="p-5 border-b border-gray-200/60 space-y-4 bg-gradient-to-r from-white/90 to-blue-50/50 flex-shrink-0">
             <div className="flex items-center gap-3 bg-white rounded-lg px-3 py-2 border border-gray-200">
