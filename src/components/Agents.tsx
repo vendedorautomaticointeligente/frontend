@@ -192,6 +192,19 @@ export function Agents() {
     setLastInstancesSync(now.toLocaleTimeString())
   }
 
+  // Get which instances are already assigned to agents (excluding the current agent if editing)
+  const getUnavailableInstances = () => {
+    const unavailable: Record<string, string> = {}
+    
+    agents.forEach((agent) => {
+      if (agent.id !== selectedAgent?.id && agent.data?.conexao_whatsapp) {
+        unavailable[agent.data.conexao_whatsapp] = agent.name
+      }
+    })
+    
+    return unavailable
+  }
+
   const assignAgentInstance = async (agentId: string, instanceName: string) => {
     try {
       const response = await safeFetch(
@@ -1036,11 +1049,22 @@ export function Agents() {
                         >
                           <option value="">Selecione uma conexão...</option>
                           {instances.length > 0 ? (
-                            instances.map((inst) => (
-                              <option key={inst.id} value={inst.instanceName}>
-                                {inst.connectionName}
-                              </option>
-                            ))
+                            instances.map((inst) => {
+                              const unavailable = getUnavailableInstances()
+                              const isUnavailable = unavailable[inst.instanceName]
+                              return (
+                                <option 
+                                  key={inst.id} 
+                                  value={inst.instanceName}
+                                  disabled={!!isUnavailable}
+                                >
+                                  {isUnavailable 
+                                    ? `❌ ${inst.connectionName} (Já conectado ao agente "${unavailable[inst.instanceName]}")` 
+                                    : inst.connectionName
+                                  }
+                                </option>
+                              )
+                            })
                           ) : (
                             <option disabled>Nenhuma instância disponível</option>
                           )}
@@ -1745,11 +1769,22 @@ export function Agents() {
                         >
                           <option value="">Selecione uma conexão...</option>
                           {instances.length > 0 ? (
-                            instances.map((inst) => (
-                              <option key={inst.id} value={inst.instanceName}>
-                                {inst.connectionName}
-                              </option>
-                            ))
+                            instances.map((inst) => {
+                              const unavailable = getUnavailableInstances()
+                              const isUnavailable = unavailable[inst.instanceName]
+                              return (
+                                <option 
+                                  key={inst.id} 
+                                  value={inst.instanceName}
+                                  disabled={!!isUnavailable}
+                                >
+                                  {isUnavailable 
+                                    ? `❌ ${inst.connectionName} (Já conectado ao agente "${unavailable[inst.instanceName]}")` 
+                                    : inst.connectionName
+                                  }
+                                </option>
+                              )
+                            })
                           ) : (
                             <option disabled>Nenhuma instância disponível</option>
                           )}
