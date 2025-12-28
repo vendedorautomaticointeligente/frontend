@@ -1,0 +1,229 @@
+import { useState, useEffect, createContext, useContext } from 'react'
+import { supabase } from '../utils/supabase/client'
+
+interface User {
+  id: string
+  email: string
+  name: string
+  company?: string
+  role: 'user' | 'admin'
+  plan: string
+}
+
+interface AuthContextType {
+  user: User | null
+  loading: boolean
+  isAdmin: boolean
+  signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  signUp: (email: string, password: string, name: string, company?: string) => Promise<{ success: boolean; error?: string }>
+  signOut: () => Promise<void>
+  accessToken: string | null
+}
+
+const AuthContext = createContext<AuthContextType | null>(null)
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+
+  const checkSession = async () => {
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      
+      if (error) {
+        console.error('Session error:', error)
+        setUser(null)
+        setAccessToken(null)
+        return
+      }
+
+      if (session?.access_token && session?.user) {
+        setAccessToken(session.access_token)
+        
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Usuário',
+          company: session.user.user_metadata?.company || '',
+          role: session.user.email === 'admin@vai.com.br' ? 'admin' : 'user',
+          plan: 'pro'
+        }
+        
+        setUser(userData)
+      } else {
+        setUser(null)
+        setAccessToken(null)
+      }
+    } catch (error) {
+      console.error('Error checking session:', error)
+      setUser(null)
+      setAccessToken(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    checkSession()
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.access_token && session?.user) {
+        setAccessToken(session.access_token)
+        
+        const userData: User = {
+          id: session.user.id,
+          email: session.user.email || '',
+          name: session.user.user_metadata?.name || session.user.email?.split('@')[0] || 'Usuário',
+          company: session.user.user_metadata?.company || '',
+          role: session.user.email === 'admin@vai.com.br' ? 'admin' : 'user',
+          plan: 'pro'
+        }
+        
+        setUser(userData)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
+        setAccessToken(null)
+      } else if (event === 'TOKEN_REFRESHED' && session?.access_token) {
+        setAccessToken(session.access_token)
+      }
+      
+      setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  const signUp = async (email: string, password: string, name: string, company?: string) => {
+    try {
+      setLoading(true)
+      
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+        options: {
+          data: {
+            name: name.trim(),
+            company: company?.trim() || ''
+          }
+        }
+      })
+
+      if (error) {
+        if (error.message.includes('already registered')) {
+          return { success: false, error: 'Este email já está cadastrado' }
+        } else if (error.message.includes('weak password')) {
+          return { success: false, error: 'Senha muito fraca. Use pelo menos 6 caracteres' }
+        } else if (error.message.includes('invalid email')) {
+          return { success: false, error: 'Email inválido' }
+        }
+        
+        return { success: false, error: error.message || 'Erro ao criar conta' }
+      }
+
+      // Para admin, fazer login automático
+      if (email === 'admin@vai.com.br') {
+        const signInResult = await signIn(email, password)
+        return signInResult
+      }
+      
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: 'Erro de conexão' }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const signIn = async (email: string, password: string) => {
+    try {
+      setLoading(true)
+      
+      console.log('🔐 Attempting sign in for:', email.trim())
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password
+      })
+
+      if (error) {
+        console.error('❌ Sign in error:', error.message, error)
+        
+        // Check for network/connection errors
+        if (error.message.includes('Failed to fetch') || error.message.includes('fetch')) {
+          return { 
+            success: false, 
+            error: 'Erro de conexão com o servidor. Verifique sua internet e tente novamente.' 
+          }
+        } else if (error.message.includes('Invalid login credentials')) {
+          return { success: false, error: 'Email ou senha incorretos' }
+        } else if (error.message.includes('Email not confirmed')) {
+          return { success: false, error: 'Email não confirmado' }
+        } else if (error.message.includes('Too many requests')) {
+          return { success: false, error: 'Muitas tentativas, aguarde alguns minutos' }
+        } else if (error.message.includes('User not found')) {
+          return { success: false, error: 'Usuário não encontrado' }
+        }
+        
+        return { success: false, error: error.message || 'Erro na autenticação' }
+      }
+
+      if (!data.session || !data.user) {
+        return { success: false, error: 'Erro na autenticação - dados inválidos' }
+      }
+
+      console.log('✅ Sign in successful for:', data.user.email)
+      return { success: true }
+    } catch (error: any) {
+      console.error('❌ Sign in exception:', error)
+      
+      // Provide more specific error messages
+      if (error.message?.includes('Failed to fetch') || error.name === 'TypeError') {
+        return { 
+          success: false, 
+          error: 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet.' 
+        }
+      }
+      
+      return { success: false, error: `Erro de conexão: ${error.message || 'Desconhecido'}` }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const signOut = async () => {
+    try {
+      setLoading(true)
+      await supabase.auth.signOut()
+      setUser(null)
+      setAccessToken(null)
+    } catch (error) {
+      console.error('Error signing out:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const isAdmin = user?.role === 'admin'
+
+  return (
+    <AuthContext.Provider value={{
+      user,
+      loading,
+      isAdmin,
+      signIn,
+      signUp,
+      signOut,
+      accessToken
+    }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export const useAuth = () => {
+  const context = useContext(AuthContext)
+  if (!context) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
