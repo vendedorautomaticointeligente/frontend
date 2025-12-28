@@ -97,6 +97,54 @@ interface Agent {
   data: AgentFormData
 }
 
+// 📊 Tipos para as novas respostas melhoradas do backend
+interface PromptPreview {
+  preview: string
+  total_lines: number
+  total_chars: number
+  total_words: number
+}
+
+interface PromptInfo {
+  hash: string
+  preview: PromptPreview
+  generated_at?: string
+  updated_at?: string
+  regenerated?: boolean
+}
+
+interface ValidationInfo {
+  persisted: boolean
+  prompt_generated: boolean
+  data_complete?: boolean
+  associations_correct?: boolean
+  data_intact?: boolean
+  timestamp: string
+}
+
+interface FieldChange {
+  old_value: string | number
+  new_value: string | number
+  changed_at: string
+}
+
+interface ChangesInfo {
+  fields_modified: Record<string, FieldChange | { old_count: number, new_count: number, changed_at: string }>
+  fields_modified_count: number
+  prompt_changed: boolean
+  previous_prompt_hash?: string
+  current_prompt_hash?: string
+}
+
+interface AgentResponse {
+  success: boolean
+  message: string
+  agent: Agent
+  validation: ValidationInfo
+  changes?: ChangesInfo
+  prompt_info: PromptInfo
+}
+
 export function Agents() {
   const { accessToken } = useAuth()
   const initialAgents = readJsonCache<Agent[]>(AGENTS_CACHE_KEY) ?? []
@@ -461,7 +509,31 @@ export function Agents() {
         return
       }
 
-      const createdAgent = await response.json()
+      const createdAgent = await response.json() as AgentResponse
+
+      // 📊 NOVO: Consumir informações da resposta melhorada
+      if (createdAgent.validation && createdAgent.validation.persisted && createdAgent.validation.prompt_generated) {
+        // ✅ Validação bem-sucedida na criação
+        console.log('✅ Creation validation confirmed:', createdAgent.validation)
+        
+        // 📝 Exibir informações do prompt criado
+        if (createdAgent.prompt_info) {
+          console.log('📊 Prompt criado com sucesso:', {
+            hash: createdAgent.prompt_info.hash,
+            lines: createdAgent.prompt_info.preview?.total_lines,
+            chars: createdAgent.prompt_info.preview?.total_chars,
+            words: createdAgent.prompt_info.preview?.total_words
+          })
+          
+          toast.success(
+            `✅ Agente criado com sucesso! Prompt gerado (${createdAgent.prompt_info.preview?.total_lines} linhas, ${createdAgent.prompt_info.preview?.total_chars} caracteres)`
+          )
+        }
+      } else if (createdAgent.success) {
+        // Fallback se resposta não tiver nova estrutura
+        console.warn('⚠️ Resposta de criação sem estrutura de validation')
+        toast.success('Agente criado!')
+      }
 
       if (formData.conexao_whatsapp && createdAgent.agent?.id) {
         await assignAgentInstance(createdAgent.agent.id, formData.conexao_whatsapp)
@@ -732,8 +804,54 @@ export function Agents() {
       }
 
       console.log('🔍 DEBUG: Response ok, parsing JSON')
-      const result = await response.json()
+      const result = await response.json() as AgentResponse
       console.log('🔍 DEBUG: Update result:', result)
+
+      // 📊 NOVO: Consumir informações da resposta melhorada
+      if (result.validation && result.validation.persisted && result.validation.prompt_generated) {
+        // ✅ Validação bem-sucedida
+        console.log('✅ Validation confirmed:', result.validation)
+        
+        // 📝 Se houve mudanças, exibir detalhes
+        if (result.changes && result.changes.fields_modified_count > 0) {
+          const fieldsChanged = result.changes.fields_modified_count
+          const promptChanged = result.changes.prompt_changed
+          
+          console.log(`✅ ${fieldsChanged} campo(s) alterado(s), Prompt regenerado: ${promptChanged}`)
+          
+          // 🎯 Toast com detalhes da mudança
+          toast.success(
+            promptChanged
+              ? `✅ Agente atualizado! ${fieldsChanged} campo(s) alterado(s) + prompt regenerado`
+              : `✅ Agente atualizado! ${fieldsChanged} campo(s) alterado(s)`
+          )
+          
+          // 📊 Log detalhado das mudanças para auditoria
+          if (result.changes.fields_modified && Object.keys(result.changes.fields_modified).length > 0) {
+            console.log('📝 Campos modificados:')
+            Object.entries(result.changes.fields_modified).forEach(([field, change]: [string, any]) => {
+              console.log(`  • ${field}:`, change)
+            })
+          }
+          
+          // 🔐 Hash do prompt para rastreamento
+          if (result.prompt_info) {
+            console.log('📊 Prompt Info:', {
+              hash: result.prompt_info.hash,
+              preview: result.prompt_info.preview,
+              regenerated: result.prompt_info.regenerated
+            })
+          }
+        } else {
+          // Nenhuma mudança detectada
+          console.log('ℹ️ Nenhuma mudança de dados detectada')
+          toast.info('Agente salvo (nenhuma alteração de dados detectada)')
+        }
+      } else if (result.success) {
+        // Fallback se resposta não tiver nova estrutura
+        console.warn('⚠️ Resposta sem estrutura de validation completa')
+        toast.success('Agente atualizado com sucesso!')
+      }
 
       if (sanitizedData.conexao_whatsapp) {
         console.log('🔍 DEBUG: Assigning WhatsApp instance')
