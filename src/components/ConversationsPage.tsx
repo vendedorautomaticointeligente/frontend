@@ -343,9 +343,46 @@ export function ConversationsPage() {
   // FUNÇÃO 1B: Atualizar instâncias disponíveis (NOVO)
   // ============================================================================
 
+  const loadAvailableInstances = useCallback(async () => {
+    if (!accessToken) return
+
+    try {
+      console.log('📱 Carregando instâncias disponíveis...')
+      const response = await safeFetch(
+        `${baseUrl}/whatsapp/connections`,
+        {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (response?.ok) {
+        const data = await response.json()
+        const connections = data.connections || []
+        
+        // Extrair nomes das instâncias
+        const instanceNames = connections
+          .map((conn: any) => conn.instanceName || conn.name)
+          .filter((name: string) => name && name.trim() !== '')
+
+        console.log('✅ Instâncias carregadas:', instanceNames)
+        setAvailableInstances(instanceNames)
+      } else {
+        console.error('❌ Erro ao carregar instâncias:', response?.status)
+      }
+    } catch (error) {
+      console.error('❌ Erro ao carregar instâncias:', error)
+    }
+  }, [accessToken, baseUrl])
+
+  // Carregar instâncias ao inicializar componente
   useEffect(() => {
-    if (conversations.length > 0) {
-      // Extrair instâncias únicas, filtrando vazias
+    loadAvailableInstances()
+  }, [loadAvailableInstances])
+
+  // Atualizar instâncias também quando conversas são carregadas (como fallback)
+  useEffect(() => {
+    if (conversations.length > 0 && availableInstances.length === 0) {
       const instances = Array.from(
         new Set(
           conversations
@@ -353,14 +390,13 @@ export function ConversationsPage() {
             .filter(instance => instance && instance.trim() !== '')
         )
       ).sort()
-
-      console.log('📱 Instâncias disponíveis:', instances)
-      setAvailableInstances(instances)
-
-      // Se conversas foram recarregadas, resetar instância selecionada para "Todas"
-      setSelectedInstance('')
+      
+      if (instances.length > 0) {
+        console.log('📱 Instâncias extraídas das conversas:', instances)
+        setAvailableInstances(instances)
+      }
     }
-  }, [conversations])
+  }, [conversations, availableInstances.length])
 
   // ============================================================================
   // FUNÇÃO 2: Carregar Mensagens da Conversa
