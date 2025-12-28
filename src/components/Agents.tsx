@@ -20,7 +20,6 @@ import {
   Pause,
   Sparkles,
   Copy,
-  Eye,
   RefreshCw,
   Loader2,
   X,
@@ -144,22 +143,6 @@ interface AgentResponse {
   validation: ValidationInfo
   changes?: ChangesInfo
   prompt_info: PromptInfo
-}
-
-interface PromptStatistics {
-  total_lines: number
-  total_chars: number
-  total_words: number
-  generated_at: string
-  prompt_hash: string
-}
-
-interface PromptViewResponse {
-  success: boolean
-  agent_id: number
-  agent_name: string
-  prompt: string
-  statistics: PromptStatistics
 }
 
 export function Agents() {
@@ -669,88 +652,6 @@ export function Agents() {
     } catch (error) {
       console.error('Error duplicating agent:', error)
       toast.error('Erro ao duplicar agente')
-    }
-  }
-
-  const viewAgentPrompt = async (agent: Agent) => {
-    try {
-      const baseUrl = getApiUrl()
-      const response = await fetch(`${baseUrl}/agents/${agent.id}/prompt`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`)
-      }
-
-      const data = await response.json() as PromptViewResponse
-
-      if (data.success) {
-        // Mostrar modal com o prompt completo
-        const statsText = `
-📊 ESTATÍSTICAS:
-  • Linhas: ${data.statistics.total_lines}
-  • Caracteres: ${data.statistics.total_chars}
-  • Palavras: ${data.statistics.total_words}
-  • Hash: ${data.statistics.prompt_hash.substring(0, 16)}...
-  • Atualizado: ${new Date(data.statistics.generated_at).toLocaleString('pt-BR')}
-        `.trim()
-
-        // Copiar para clipboard e mostrar toast
-        const fullText = `${data.prompt}\n\n${statsText}`
-        await navigator.clipboard.writeText(fullText)
-
-        toast.success(
-          `✅ Prompt copiado! ${data.statistics.total_lines} linhas, ${data.statistics.total_chars} caracteres`,
-          {
-            duration: 3000,
-            action: {
-              label: 'Ver',
-              onClick: () => {
-                // Abrir em uma janela modal ou textarea
-                const modal = document.createElement('div')
-                modal.innerHTML = `
-                  <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 9999;">
-                    <div style="background: white; border-radius: 8px; max-width: 90%; max-height: 90%; overflow: auto; padding: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
-                      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #ccc; padding-bottom: 10px;">
-                        <h2 style="margin: 0; font-size: 18px; font-weight: bold;">${data.agent_name} - Prompt</h2>
-                        <button onclick="this.closest('[role=dialog]').remove()" style="background: none; border: none; font-size: 24px; cursor: pointer;">&times;</button>
-                      </div>
-                      <pre style="white-space: pre-wrap; word-wrap: break-word; font-family: 'Monaco', 'Courier New', monospace; font-size: 12px; line-height: 1.5; color: #333; background: #f5f5f5; padding: 15px; border-radius: 4px; margin: 0 0 15px 0; max-height: 500px; overflow-y: auto;">${data.prompt}</pre>
-                      <div style="background: #f9f9f9; padding: 10px; border-radius: 4px; font-size: 12px; color: #666; border-left: 3px solid #0066cc;">
-                        <strong>Estatísticas:</strong><br/>
-                        Linhas: ${data.statistics.total_lines} | Caracteres: ${data.statistics.total_chars} | Palavras: ${data.statistics.total_words}<br/>
-                        Hash: <code style="background: #ddd; padding: 2px 4px; border-radius: 2px;">${data.statistics.prompt_hash.substring(0, 32)}</code><br/>
-                        Atualizado: ${new Date(data.statistics.generated_at).toLocaleString('pt-BR')}
-                      </div>
-                    </div>
-                  </div>
-                `
-                document.body.appendChild(modal)
-                modal.addEventListener('click', (e) => {
-                  if (e.target === modal) modal.remove()
-                })
-              }
-            }
-          }
-        )
-
-        console.log('✅ Prompt do agente:', {
-          agent_id: data.agent_id,
-          agent_name: data.agent_name,
-          statistics: data.statistics,
-          prompt_preview: data.prompt.substring(0, 200) + '...'
-        })
-      } else {
-        toast.error('Falha ao recuperar prompt')
-      }
-    } catch (error) {
-      console.error('❌ Erro ao visualizar prompt:', error)
-      toast.error('Erro ao visualizar prompt do agente')
     }
   }
 
@@ -1755,14 +1656,6 @@ export function Agents() {
                           Ativar
                         </>
                       )}
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => viewAgentPrompt(agent)}
-                      title="Visualizar prompt gerado"
-                    >
-                      <Eye className="w-4 h-4" />
                     </Button>
                     <Button
                       variant="outline"
