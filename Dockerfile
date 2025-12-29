@@ -7,7 +7,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with cache optimization
-RUN npm ci --prefer-offline --no-audit
+# Using --legacy-peer-deps to resolve date-fns v4 with react-day-picker v8
+RUN npm ci --prefer-offline --no-audit --legacy-peer-deps
 
 # Copy source code
 COPY . .
