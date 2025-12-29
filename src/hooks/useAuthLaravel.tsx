@@ -10,8 +10,19 @@ interface User {
   email: string
   name: string
   company?: string
+  phone?: string
   role: 'user' | 'admin'
   plan: string
+  address_street?: string
+  address_number?: string
+  address_complement?: string
+  address_neighborhood?: string
+  address_city?: string
+  address_state?: string
+  address_zipcode?: string
+  email_notifications?: boolean
+  whatsapp_notifications?: boolean
+  weekly_report?: boolean
 }
 
 interface AuthContextType {
@@ -21,6 +32,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
   signUp: (email: string, password: string, name: string, company?: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
+  updateUser: (userData: Partial<User>) => void
   accessToken: string | null
   loginState: {
     loading: boolean
@@ -148,6 +160,30 @@ const getUserSnapshot = (): User | null => {
   }
 }
 
+// 🔥 CRÍTICO: Mapear TODOS os campos do backend para User
+// Isso garante que nenhum dado é perdido quando sincronizamos com o servidor
+const mapServerUserToLocalUser = (serverUser: any): User => {
+  return {
+    id: serverUser.id,
+    email: serverUser.email,
+    name: serverUser.name,
+    company: serverUser.company || '',
+    phone: serverUser.phone,
+    role: serverUser.role === 'admin' ? 'admin' : 'user',
+    plan: serverUser.plan || 'free',
+    address_street: serverUser.address_street,
+    address_number: serverUser.address_number,
+    address_complement: serverUser.address_complement,
+    address_neighborhood: serverUser.address_neighborhood,
+    address_city: serverUser.address_city,
+    address_state: serverUser.address_state,
+    address_zipcode: serverUser.address_zipcode,
+    email_notifications: serverUser.email_notifications,
+    whatsapp_notifications: serverUser.whatsapp_notifications,
+    weekly_report: serverUser.weekly_report,
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
@@ -198,14 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (response?.ok) {
               const data = await response.json()
               console.log('✅ Cache extendido validado em background')
-              const userData: User = {
-                id: data.user.id,
-                email: data.user.email,
-                name: data.user.name,
-                company: data.user.company || '',
-                role: data.user.role === 'admin' ? 'admin' : 'user',
-                plan: data.user.plan || 'free'
-              }
+              const userData = mapServerUserToLocalUser(data.user)
               setUser(userData)
               saveUserSnapshot(userData)
               saveExtendedCache(userData, extendedCache.token)
@@ -258,14 +287,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (response.ok) {
               const data = await response.json()
               console.log('✅ Sessão validada em background')
-              const userData: User = {
-                id: data.user.id,
-                email: data.user.email,
-                name: data.user.name,
-                company: data.user.company || '',
-                role: data.user.role === 'admin' ? 'admin' : 'user',
-                plan: data.user.plan || 'free'
-              }
+              const userData = mapServerUserToLocalUser(data.user)
               setUser(userData)
               saveUserSnapshot(userData)
               saveExtendedCache(userData, storedToken)
@@ -316,14 +338,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (response.ok) {
             const data = await response.json()
             console.log('✅ Sessão válida:', data.user.email)
-            const userData: User = {
-              id: data.user.id,
-              email: data.user.email,
-              name: data.user.name,
-              company: data.user.company || '',
-              role: data.user.role === 'admin' ? 'admin' : 'user',
-              plan: data.user.plan || 'free'
-            }
+            const userData = mapServerUserToLocalUser(data.user)
 
             setUser(userData)
             setAccessToken(storedToken)
@@ -561,14 +576,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         saveTokenLocal(data.token)
         console.log('✅ Token salvo! localStorage:', getStoredToken()?.substring(0, 20) + '...')
         
-        const userData: User = {
-          id: data.user.id,
-          email: data.user.email,
-          name: data.user.name,
-          company: data.user.company || '',
-          role: data.user.role === 'admin' ? 'admin' : 'user',
-          plan: data.user.plan || 'free'
-        }
+        const userData = mapServerUserToLocalUser(data.user)
         
         console.log('👤 Setando user:', userData.email)
         setUser(userData)
@@ -639,6 +647,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const updateUser = (userData: Partial<User>) => {
+    if (user) {
+      const updatedUser: User = {
+        ...user,
+        ...userData
+      }
+      setUser(updatedUser)
+      
+      // Atualizar cache local
+      saveUserSnapshot(updatedUser)
+      
+      // Atualizar cache extendido
+      if (accessToken) {
+        saveExtendedCache(updatedUser, accessToken)
+        
+        // Verificar se o cache foi salvo corretamente
+        const savedCache = localStorage.getItem('vai_extended_session_cache')
+        console.log('💾 Cache extendido salvo:', savedCache ? '✅' : '❌')
+        if (savedCache) {
+          try {
+            const parsed = JSON.parse(savedCache)
+            console.log('📦 Dados no cache:', {
+              user_name: parsed.user?.name,
+              user_phone: parsed.user?.phone,
+              user_address_street: parsed.user?.address_street,
+              user_address_city: parsed.user?.address_city,
+            })
+          } catch (e) {
+            console.error('❌ Erro ao parsear cache:', e)
+          }
+        }
+      }
+      
+      console.log('✅ Usuário atualizado no contexto e cache:', updatedUser)
+    }
+  }
+
   const value: AuthContextType = {
     user,
     loading,
@@ -646,6 +691,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     signIn,
     signUp,
     signOut,
+    updateUser,
     accessToken,
     loginState
   }

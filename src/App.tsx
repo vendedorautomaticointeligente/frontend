@@ -86,14 +86,14 @@ function MainApp() {
     {
       key: 'listsB2B' as ActiveSection,
       icon: Building2,
-      label: 'Geração de Listas',
-      description: 'Empresas e CNPJs'
+      label: 'Listas de Contato',
+      description: 'Gerencie seus contatos'
     },
     {
       key: 'crm' as ActiveSection,
       icon: Users,
       label: 'CRM',
-      description: 'Gestão de leads e oportunidades'
+      description: 'Gestão de oportunidades'
     },
     {
       key: 'conversations' as ActiveSection,
@@ -112,12 +112,6 @@ function MainApp() {
       icon: Megaphone,
       label: 'Campanhas',
       description: 'Disparos em massa'
-    },
-    {
-      key: 'automations' as ActiveSection,
-      icon: Settings2,
-      label: 'Automações',
-      description: 'Fluxos automáticos completos'
     },
     {
       key: 'plans' as ActiveSection,

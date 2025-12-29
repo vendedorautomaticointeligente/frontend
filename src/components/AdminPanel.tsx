@@ -632,7 +632,7 @@ export function AdminPanel() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
                   <p className="font-medium text-muted-foreground text-xs mb-1">App Name</p>
-                  <p className="font-mono text-xs sm:text-sm break-all font-semibold">SaaS VAI</p>
+                  <p className="font-mono text-xs sm:text-sm break-all font-semibold">VAI - Vendedor Automático Inteligente</p>
                 </div>
                 <div className="p-3 rounded-lg bg-gray-50 dark:bg-gray-900">
                   <p className="font-medium text-muted-foreground text-xs mb-1">Backend</p>

@@ -1,9 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from "react"
-import { Search, Phone, Video, MoreVertical, Send, Loader2, RefreshCw } from "lucide-react"
+import { Search, Phone, Video, MoreVertical, Send, Loader2, RefreshCw, UserPlus } from "lucide-react"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
 import { Avatar, AvatarFallback } from "./ui/avatar"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
+import { Label } from "./ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { TypingIndicator } from "./TypingIndicator"
+import { MediaMessage } from "./MediaMessage"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { useSSE } from "../hooks/useSSE"
 import { toast } from "sonner"
@@ -21,6 +25,20 @@ type Message = {
   timestamp: string
   isSent: boolean
   status?: 'sent' | 'delivered' | 'read'
+  message_type?: 'text' | 'audio' | 'image' | 'video' | 'document'
+  media_data?: {
+    url?: string
+    caption?: string
+    filename?: string
+    transcription?: string
+    analysis?: string
+    duration?: number
+    mimetype?: string
+    ptt?: boolean
+    animated?: boolean
+    analyzed_at?: string
+  }
+  media_url?: string
 }
 
 type Conversation = {
@@ -42,6 +60,8 @@ export function ConversationsPage() {
   const { accessToken, user } = useAuth()
   const baseUrl = getApiUrl()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // STATE - Apenas 3 coisas necessárias
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -61,6 +81,30 @@ export function ConversationsPage() {
 
   // 🆕 PASSO 5: Typing indicator para segmentos de resposta
   const [isAgentTyping, setIsAgentTyping] = useState(false)
+
+  // 🆕 PASSO 6: Upload de mídia
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+  const [mediaPreview, setMediaPreview] = useState<{
+    type: 'audio' | 'image' | null
+    file: File | null
+    preview: string | null
+    caption: string
+  }>({ type: null, file: null, preview: null, caption: '' })
+  const [uploadError, setUploadError] = useState<string | null>(null)
+
+  // STATE - Dialog para criar lead
+  const [showCreateLeadDialog, setShowCreateLeadDialog] = useState(false)
+  const [isCreatingLead, setIsCreatingLead] = useState(false)
+  const [leadFormData, setLeadFormData] = useState({
+    name: '',
+    company: '',
+    email: '',
+    phone: '',
+    city: '',
+    state: '',
+    segment: '',
+    status: 'new' as 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost',
+  })
 
   // STATE - SSE/Polling fallback
   const [usePolling, setUsePolling] = useState(false)
@@ -343,46 +387,9 @@ export function ConversationsPage() {
   // FUNÇÃO 1B: Atualizar instâncias disponíveis (NOVO)
   // ============================================================================
 
-  const loadAvailableInstances = useCallback(async () => {
-    if (!accessToken) return
-
-    try {
-      console.log('📱 Carregando instâncias disponíveis...')
-      const response = await safeFetch(
-        `${baseUrl}/whatsapp/connections`,
-        {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        },
-        { timeout: FETCH_DEFAULT_TIMEOUT }
-      )
-
-      if (response?.ok) {
-        const data = await response.json()
-        const connections = data.connections || []
-        
-        // Extrair nomes das instâncias
-        const instanceNames = connections
-          .map((conn: any) => conn.instanceName || conn.name)
-          .filter((name: string) => name && name.trim() !== '')
-
-        console.log('✅ Instâncias carregadas:', instanceNames)
-        setAvailableInstances(instanceNames)
-      } else {
-        console.error('❌ Erro ao carregar instâncias:', response?.status)
-      }
-    } catch (error) {
-      console.error('❌ Erro ao carregar instâncias:', error)
-    }
-  }, [accessToken, baseUrl])
-
-  // Carregar instâncias ao inicializar componente
   useEffect(() => {
-    loadAvailableInstances()
-  }, [loadAvailableInstances])
-
-  // Atualizar instâncias também quando conversas são carregadas (como fallback)
-  useEffect(() => {
-    if (conversations.length > 0 && availableInstances.length === 0) {
+    if (conversations.length > 0) {
+      // Extrair instâncias únicas, filtrando vazias
       const instances = Array.from(
         new Set(
           conversations
@@ -390,13 +397,14 @@ export function ConversationsPage() {
             .filter(instance => instance && instance.trim() !== '')
         )
       ).sort()
-      
-      if (instances.length > 0) {
-        console.log('📱 Instâncias extraídas das conversas:', instances)
-        setAvailableInstances(instances)
-      }
+
+      console.log('📱 Instâncias disponíveis das conversas:', instances)
+      setAvailableInstances(instances)
+
+      // Se conversas foram recarregadas, resetar instância selecionada para "Todas"
+      setSelectedInstance('')
     }
-  }, [conversations, availableInstances.length])
+  }, [conversations])
 
   // ============================================================================
   // FUNÇÃO 2: Carregar Mensagens da Conversa
@@ -441,6 +449,150 @@ export function ConversationsPage() {
       setLoadingMessages(false)
     }
   }, [selectedConversation, accessToken, baseUrl])
+
+  // ============================================================================
+  // FUNÇÃO 2.5: Upload de Mídia (🎙️ 📷)
+  // ============================================================================
+
+  /**
+   * Validar arquivo de mídia
+   * - Áudio: MP3, OGG, WAV (máx 10MB)
+   * - Imagem: JPG, PNG, GIF, WebP (máx 5MB)
+   */
+  const validateMediaFile = (file: File, type: 'audio' | 'image'): { valid: boolean; error?: string } => {
+    const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10MB
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024  // 5MB
+
+    if (type === 'audio') {
+      const allowedTypes = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/webm']
+      const maxSize = MAX_AUDIO_SIZE
+
+      if (!allowedTypes.includes(file.type)) {
+        return { valid: false, error: 'Formato de áudio não suportado. Use MP3, OGG, WAV ou WebM.' }
+      }
+
+      if (file.size > maxSize) {
+        return { valid: false, error: 'Arquivo de áudio muito grande. Máximo 10MB.' }
+      }
+
+      return { valid: true }
+    }
+
+    if (type === 'image') {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+      const maxSize = MAX_IMAGE_SIZE
+
+      if (!allowedTypes.includes(file.type)) {
+        return { valid: false, error: 'Formato de imagem não suportado. Use JPG, PNG, GIF ou WebP.' }
+      }
+
+      if (file.size > maxSize) {
+        return { valid: false, error: 'Arquivo de imagem muito grande. Máximo 5MB.' }
+      }
+
+      return { valid: true }
+    }
+
+    return { valid: false, error: 'Tipo de mídia desconhecido.' }
+  }
+
+  /**
+   * Tratar seleção de arquivo (áudio ou imagem)
+   */
+  const handleMediaFileSelected = async (file: File, type: 'audio' | 'image') => {
+    setUploadError(null)
+
+    // 1️⃣ Validar arquivo
+    const validation = validateMediaFile(file, type)
+    if (!validation.valid) {
+      setUploadError(validation.error)
+      return
+    }
+
+    // 2️⃣ Criar preview
+    let preview: string | null = null
+    try {
+      if (type === 'image') {
+        // Preview de imagem
+        preview = URL.createObjectURL(file)
+      } else if (type === 'audio') {
+        // Para áudio, apenas gerar URL para reproduzir
+        preview = URL.createObjectURL(file)
+      }
+    } catch (error) {
+      console.error('Erro ao criar preview:', error)
+    }
+
+    // 3️⃣ Armazenar no state
+    setMediaPreview({
+      type,
+      file,
+      preview,
+      caption: ''
+    })
+  }
+
+  /**
+   * Enviar arquivo de mídia para backend
+   */
+  const handleSendMedia = useCallback(async () => {
+    if (!selectedConversation || !mediaPreview.file || isUploadingMedia) return
+
+    setIsUploadingMedia(true)
+    setUploadError(null)
+
+    const formData = new FormData()
+    formData.append('file', mediaPreview.file)
+    formData.append('caption', mediaPreview.caption)
+    formData.append('type', mediaPreview.type || 'image')
+
+    try {
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}/send-media`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: formData
+        }
+      )
+
+      if (!response?.ok) {
+        setUploadError('Erro ao enviar mídia. Tente novamente.')
+        return
+      }
+
+      const data = await response.json()
+
+      if (data.status === 'success') {
+        // Limpar preview
+        if (mediaPreview.preview) {
+          URL.revokeObjectURL(mediaPreview.preview)
+        }
+        setMediaPreview({ type: null, file: null, preview: null, caption: '' })
+        toast.success('Mídia enviada com sucesso!')
+      } else {
+        setUploadError(data.message || 'Erro ao enviar mídia.')
+      }
+    } catch (error) {
+      console.error('Erro ao enviar mídia:', error)
+      setUploadError('Erro ao conectar ao servidor.')
+    } finally {
+      setIsUploadingMedia(false)
+    }
+  }, [selectedConversation, mediaPreview, accessToken, baseUrl, isUploadingMedia])
+
+  /**
+   * Cancelar upload e limpar preview
+   */
+  const handleCancelMediaUpload = () => {
+    if (mediaPreview.preview) {
+      URL.revokeObjectURL(mediaPreview.preview)
+    }
+    setMediaPreview({ type: null, file: null, preview: null, caption: '' })
+    setUploadError(null)
+  }
 
   // ============================================================================
   // FUNÇÃO 3: Enviar Mensagem (SEM DELAYS, SEM CACHE)
@@ -508,6 +660,80 @@ export function ConversationsPage() {
   }, [messageInput, selectedConversation, accessToken, baseUrl, isSending])
 
   // ============================================================================
+  // FUNÇÃO 4: Criar Lead a partir da Conversa
+  // ============================================================================
+
+  const handleCreateLead = useCallback(async () => {
+    if (!selectedConversation || !accessToken) return
+
+    setIsCreatingLead(true)
+
+    try {
+      // Preparar dados do lead
+      const leadData = {
+        name: leadFormData.name || selectedConversation.contact_name,
+        company: leadFormData.company || '',
+        email: leadFormData.email || '',
+        phone: leadFormData.phone || selectedConversation.phone_number,
+        city: leadFormData.city || '',
+        state: leadFormData.state || '',
+        segment: leadFormData.segment || '',
+        status: leadFormData.status || 'new',
+        source: 'conversation'
+      }
+
+      // Chamar API para criar/atualizar lead
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}/create-or-update-lead`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${accessToken}`
+          },
+          body: JSON.stringify(leadData)
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        const errorData = await response?.json().catch(() => ({}))
+        toast.error(errorData?.message || 'Erro ao criar lead')
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.status === 'success') {
+        toast.success('Lead criado/atualizado com sucesso!')
+        setShowCreateLeadDialog(false)
+        
+        // Resetar formulário
+        setLeadFormData({
+          name: '',
+          company: '',
+          email: '',
+          phone: '',
+          city: '',
+          state: '',
+          segment: '',
+          status: 'new',
+        })
+
+        // Recarregar conversas para atualizar dados do lead
+        loadConversations(true, false)
+      } else {
+        toast.error(result.message || 'Erro ao criar lead')
+      }
+    } catch (error) {
+      console.error('Erro ao criar lead:', error)
+      toast.error('Erro ao criar lead')
+    } finally {
+      setIsCreatingLead(false)
+    }
+  }, [selectedConversation, accessToken, baseUrl, leadFormData, loadConversations])
+
+  // ============================================================================
   // EFEITO 1: Carregar conversas uma vez no mount
   // ============================================================================
 
@@ -523,6 +749,13 @@ export function ConversationsPage() {
 
   useEffect(() => {
     if (selectedConversation) {
+      console.log('✅ Conversa selecionada - botões de mídia devem estar visíveis:', {
+        conversationId: selectedConversation.id,
+        mediaPreviewType: mediaPreview.type,
+        isUploadingMedia: isUploadingMedia,
+        audioInputRefExists: !!audioInputRef.current,
+        imageInputRefExists: !!imageInputRef.current
+      })
       loadMessages()
     }
   }, [selectedConversation, loadMessages])
@@ -705,6 +938,164 @@ export function ConversationsPage() {
                 </div>
               </div>
               <div className="flex gap-2">
+                <Dialog open={showCreateLeadDialog} onOpenChange={setShowCreateLeadDialog}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="gap-2"
+                      title="Adicionar contato ao CRM"
+                    >
+                      <UserPlus className="w-4 h-4" />
+                      <span className="hidden sm:inline">CRM</span>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Adicionar ao CRM</DialogTitle>
+                      <DialogDescription>
+                        Criar um novo lead a partir desta conversa
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <div className="space-y-4">
+                      {/* Nome */}
+                      <div>
+                        <Label htmlFor="lead-name">Nome *</Label>
+                        <Input
+                          id="lead-name"
+                          value={leadFormData.name}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, name: e.target.value })}
+                          placeholder={selectedConversation.contact_name}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Telefone */}
+                      <div>
+                        <Label htmlFor="lead-phone">Telefone</Label>
+                        <Input
+                          id="lead-phone"
+                          value={leadFormData.phone}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, phone: e.target.value })}
+                          placeholder={selectedConversation.phone_number}
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Email */}
+                      <div>
+                        <Label htmlFor="lead-email">Email</Label>
+                        <Input
+                          id="lead-email"
+                          type="email"
+                          value={leadFormData.email}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, email: e.target.value })}
+                          placeholder="email@example.com"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Empresa */}
+                      <div>
+                        <Label htmlFor="lead-company">Empresa</Label>
+                        <Input
+                          id="lead-company"
+                          value={leadFormData.company}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, company: e.target.value })}
+                          placeholder="Nome da empresa"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Cidade */}
+                      <div>
+                        <Label htmlFor="lead-city">Cidade</Label>
+                        <Input
+                          id="lead-city"
+                          value={leadFormData.city}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, city: e.target.value })}
+                          placeholder="Cidade"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Estado */}
+                      <div>
+                        <Label htmlFor="lead-state">Estado</Label>
+                        <Input
+                          id="lead-state"
+                          value={leadFormData.state}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, state: e.target.value })}
+                          placeholder="UF"
+                          className="mt-1 max-w-[100px]"
+                        />
+                      </div>
+
+                      {/* Segmento */}
+                      <div>
+                        <Label htmlFor="lead-segment">Segmento</Label>
+                        <Input
+                          id="lead-segment"
+                          value={leadFormData.segment}
+                          onChange={(e) => setLeadFormData({ ...leadFormData, segment: e.target.value })}
+                          placeholder="Segmento/Ramo"
+                          className="mt-1"
+                        />
+                      </div>
+
+                      {/* Status */}
+                      <div>
+                        <Label htmlFor="lead-status">Status</Label>
+                        <Select 
+                          value={leadFormData.status}
+                          onValueChange={(value) => setLeadFormData({ ...leadFormData, status: value as any })}
+                        >
+                          <SelectTrigger id="lead-status" className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="new">Novo</SelectItem>
+                            <SelectItem value="contacted">Contatado</SelectItem>
+                            <SelectItem value="qualified">Qualificado</SelectItem>
+                            <SelectItem value="proposal">Proposta</SelectItem>
+                            <SelectItem value="won">Ganho</SelectItem>
+                            <SelectItem value="lost">Perdido</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Botões */}
+                      <div className="flex gap-3 justify-end pt-4">
+                        <Button
+                          variant="outline"
+                          onClick={() => setShowCreateLeadDialog(false)}
+                          disabled={isCreatingLead}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          onClick={handleCreateLead}
+                          disabled={isCreatingLead || !leadFormData.name}
+                          className="gap-2"
+                        >
+                          {isCreatingLead ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              Criando...
+                            </>
+                          ) : (
+                            <>
+                              <UserPlus className="w-4 h-4" />
+                              Adicionar ao CRM
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
                 <Button variant="ghost" size="sm">
                   <Phone className="w-4 h-4" />
                 </Button>
@@ -729,27 +1120,53 @@ export function ConversationsPage() {
                 </div>
               ) : (
                 <>
-                  {messages.map(msg => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.isSent ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div
-                        className={`
-                          max-w-xs px-4 py-2 rounded-lg
-                          ${msg.isSent
-                            ? 'bg-blue-500 text-white rounded-br-none'
-                            : 'bg-gray-200 text-gray-900 rounded-bl-none'
-                          }
-                        `}
-                      >
-                        <p className="text-sm">{msg.text}</p>
-                        <p className={`text-xs mt-1 ${msg.isSent ? 'text-blue-100' : 'text-gray-600'}`}>
-                          {msg.timestamp}
-                        </p>
+                  {messages.map(msg => {
+                    // 🎙️ 📷 Renderizar mídia se presente
+                    const hasMedia = msg.message_type && msg.message_type !== 'text' && msg.media_data?.url
+
+                    return (
+                      <div key={msg.id}>
+                        {/* ============================================================ */}
+                        {/* RENDERIZAR MÍDIA (áudio, imagem, vídeo, documento) */}
+                        {/* ============================================================ */}
+                        {hasMedia && (
+                          <div className={`flex mb-3 ${msg.isSent ? 'justify-end' : 'justify-start'}`}>
+                            <MediaMessage
+                              type={msg.message_type as 'audio' | 'image' | 'video' | 'document'}
+                              data={msg.media_data || {}}
+                              direction={msg.isSent ? 'sent' : 'received'}
+                              messageId={msg.id}
+                              text={msg.text} // Fallback se não conseguir renderizar
+                            />
+                          </div>
+                        )}
+
+                        {/* ============================================================ */}
+                        {/* RENDERIZAR TEXTO (incluindo transcrição se houver) */}
+                        {/* ============================================================ */}
+                        {msg.text && (
+                          <div
+                            className={`flex mb-2 ${msg.isSent ? 'justify-end' : 'justify-start'}`}
+                          >
+                            <div
+                              className={`
+                                max-w-xs px-4 py-2 rounded-lg
+                                ${msg.isSent
+                                  ? 'bg-blue-500 text-white rounded-br-none'
+                                  : 'bg-gray-200 text-gray-900 rounded-bl-none'
+                                }
+                              `}
+                            >
+                              <p className="text-sm">{msg.text}</p>
+                              <p className={`text-xs mt-1 ${msg.isSent ? 'text-blue-100' : 'text-gray-600'}`}>
+                                {msg.timestamp}
+                              </p>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   
                   {/* 🆕 PASSO 5: Typing indicator quando agente está respondendo */}
                   {isAgentTyping && (
@@ -763,8 +1180,171 @@ export function ConversationsPage() {
             </div>
 
             {/* Input */}
-            <div className="bg-white border-t border-gray-200/60 p-4 flex-shrink-0">
-              <div className="flex gap-3">
+            <div className="bg-white border-t border-gray-200/60 p-4 flex-shrink-0 space-y-3">
+              {/* 🎙️ 📷 PASSO 6: Preview de Mídia (se houver) */}
+              {mediaPreview.type && (
+                <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-sm">
+                      {mediaPreview.type === 'audio' ? '🎙️ Áudio' : '📷 Imagem'}
+                    </h3>
+                    <button
+                      onClick={handleCancelMediaUpload}
+                      className="text-gray-500 hover:text-red-500 text-lg font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {/* Preview de Imagem */}
+                  {mediaPreview.type === 'image' && mediaPreview.preview && (
+                    <div className="mb-3 rounded-lg overflow-hidden max-h-40">
+                      <img src={mediaPreview.preview} alt="Preview" className="w-full h-auto object-cover" />
+                    </div>
+                  )}
+
+                  {/* Preview de Áudio */}
+                  {mediaPreview.type === 'audio' && mediaPreview.preview && (
+                    <div className="mb-3 bg-white p-2 rounded border border-gray-200">
+                      <audio
+                        src={mediaPreview.preview}
+                        controls
+                        className="w-full"
+                        style={{ height: '32px' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Nome do Arquivo */}
+                  <p className="text-xs text-gray-600 mb-3 break-all">
+                    📁 {mediaPreview.file?.name}
+                  </p>
+
+                  {/* Caption (Opcional) */}
+                  <Input
+                    type="text"
+                    placeholder="Adicione uma legenda (opcional)"
+                    value={mediaPreview.caption}
+                    onChange={(e) =>
+                      setMediaPreview(prev => ({ ...prev, caption: e.target.value }))
+                    }
+                    className="mb-3 text-sm"
+                  />
+
+                  {/* Erro de Upload */}
+                  {uploadError && (
+                    <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-sm text-red-700">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Botões Ação */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleSendMedia}
+                      disabled={isUploadingMedia || !mediaPreview.file}
+                      className="flex-1 bg-green-500 hover:bg-green-600"
+                    >
+                      {isUploadingMedia ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 mr-2" />
+                          Enviar
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleCancelMediaUpload}
+                      variant="outline"
+                      disabled={isUploadingMedia}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Input de Mensagem + Botões */}
+              <div className="flex gap-3 items-end" style={{ minHeight: '44px' }}>
+                {/* Inputs de Arquivo (Ocultos) */}
+                <input
+                  ref={audioInputRef}
+                  type="file"
+                  accept="audio/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      console.log('🎙️ Arquivo de áudio selecionado:', e.target.files[0].name)
+                      handleMediaFileSelected(e.target.files[0], 'audio')
+                    }
+                  }}
+                  className="hidden"
+                  style={{ display: 'none' }}
+                />
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files?.[0]) {
+                      console.log('📷 Arquivo de imagem selecionado:', e.target.files[0].name)
+                      handleMediaFileSelected(e.target.files[0], 'image')
+                    }
+                  }}
+                  className="hidden"
+                  style={{ display: 'none' }}
+                />
+
+                {/* Botões de Mídia */}
+                <button
+                  onClick={() => {
+                    console.log('🎙️ Clique no botão de áudio - audioInputRef:', audioInputRef.current)
+                    audioInputRef.current?.click()
+                  }}
+                  disabled={mediaPreview.type !== null || isUploadingMedia}
+                  className="p-2 bg-blue-100 hover:bg-blue-200 disabled:bg-gray-100 disabled:cursor-not-allowed rounded-lg transition-colors text-lg flex-shrink-0"
+                  style={{
+                    opacity: mediaPreview.type !== null || isUploadingMedia ? 0.5 : 1,
+                    cursor: mediaPreview.type !== null || isUploadingMedia ? 'not-allowed' : 'pointer',
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Enviar áudio"
+                  aria-label="Enviar áudio"
+                >
+                  🎙️
+                </button>
+
+                <button
+                  onClick={() => {
+                    console.log('📷 Clique no botão de imagem - imageInputRef:', imageInputRef.current)
+                    imageInputRef.current?.click()
+                  }}
+                  disabled={mediaPreview.type !== null || isUploadingMedia}
+                  className="p-2 bg-blue-100 hover:bg-blue-200 disabled:bg-gray-100 disabled:cursor-not-allowed rounded-lg transition-colors text-lg flex-shrink-0"
+                  style={{
+                    opacity: mediaPreview.type !== null || isUploadingMedia ? 0.5 : 1,
+                    cursor: mediaPreview.type !== null || isUploadingMedia ? 'not-allowed' : 'pointer',
+                    minWidth: '44px',
+                    minHeight: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title="Enviar imagem"
+                  aria-label="Enviar imagem"
+                >
+                  📷
+                </button>
+
+                {/* Input de Texto */}
                 <div className="flex-1 flex items-end gap-2 bg-gray-100 rounded-lg px-3 py-2">
                   <Input
                     type="text"
@@ -778,11 +1358,14 @@ export function ConversationsPage() {
                       }
                     }}
                     className="border-0 bg-transparent focus:ring-0"
+                    disabled={mediaPreview.type !== null}
                   />
                 </div>
+
+                {/* Botão Enviar Mensagem */}
                 <Button
                   onClick={handleSendMessage}
-                  disabled={isSending || !messageInput.trim()}
+                  disabled={isSending || !messageInput.trim() || mediaPreview.type !== null}
                   className="bg-blue-500 hover:bg-blue-600"
                 >
                   {isSending ? (

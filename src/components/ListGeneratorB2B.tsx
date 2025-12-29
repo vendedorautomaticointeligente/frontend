@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card"
 import { Button as BaseButton } from "./ui/button"
 import { Input } from "./ui/input"
@@ -39,7 +39,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Pencil
+  Pencil,
+  FileUp
 } from "lucide-react"
 import { getApiUrl } from "../utils/apiConfig"
 
@@ -123,7 +124,7 @@ export function ListGeneratorB2B() {
   const [cities, setCities] = useState<Array<{value: string, label: string}>>([])
   const [selectedCities, setSelectedCities] = useState<string[]>([])
   const [neighborhoods, setNeighborhoods] = useState("")
-  const [targetContactCount, setTargetContactCount] = useState<number>(10)
+  const [targetContactCount, setTargetContactCount] = useState<number>(20)
   
   // Cities search functionality
   const [citySearchTerm, setCitySearchTerm] = useState("")
@@ -157,6 +158,10 @@ export function ListGeneratorB2B() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
   const [remainingSeconds, setRemainingSeconds] = useState(180) // 3:00 minutes
+  
+  // Import functionality
+  const [isImporting, setIsImporting] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   
   // Messages
   const [error, setError] = useState<string | null>(null)
@@ -345,6 +350,86 @@ export function ListGeneratorB2B() {
     }
   }
 
+  const importContactsFromFile = async (file: File) => {
+    if (!selectedList) {
+      setError('Por favor, selecione uma lista primeiro')
+      return
+    }
+
+    setIsImporting(true)
+    setError(null)
+
+    try {
+      const fileExtension = file.name.split('.').pop()?.toLowerCase()
+      
+      if (!['csv', 'xlsx', 'xls'].includes(fileExtension || '')) {
+        setError('❌ Formato inválido. Envie um arquivo CSV ou Excel.')
+        setIsImporting(false)
+        return
+      }
+
+      console.log(`📁 Importing ${fileExtension} file:`, file.name)
+
+      // Parse CSV if it's a CSV file
+      if (fileExtension === 'csv') {
+        const text = await file.text()
+        const lines = text.split('\n').filter(line => line.trim())
+        const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+        
+        const contacts: any[] = []
+        
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(',').map(v => v.trim())
+          
+          if (values.length < 2) continue // Skip empty lines
+          
+          const contact: any = {}
+          headers.forEach((header, index) => {
+            contact[header] = values[index] || ''
+          })
+          
+          contacts.push(contact)
+        }
+
+        if (contacts.length === 0) {
+          setError('❌ Nenhum contato encontrado no arquivo CSV')
+          setIsImporting(false)
+          return
+        }
+
+        // Send contacts to backend
+        const data = await apiCall(`/lists/${selectedList}/import-contacts`, {
+          method: 'POST',
+          body: JSON.stringify({ contacts })
+        })
+
+        if (data.success) {
+          console.log(`✅ Imported ${data.importedCount} contacts`)
+          setSuccess(`✅ ${data.importedCount} contatos importados com sucesso!`)
+          await loadSavedLists()
+        } else {
+          throw new Error(data.message || 'Erro ao importar contatos')
+        }
+      } else {
+        // For Excel files, we need to parse them differently
+        // For now, show a message
+        setError('⚠️ Para arquivos Excel, converta para CSV primeiro ou use o formato CSV')
+      }
+
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+
+    } catch (error) {
+      console.error('Error importing contacts:', error)
+      const errorMsg = (error as Error).message || String(error)
+      setError(`❌ Erro ao importar: ${errorMsg}`)
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
   const createNewList = async () => {
     if (!newListName.trim()) {
       setError('Nome da lista é obrigatório')
@@ -509,8 +594,8 @@ export function ListGeneratorB2B() {
       return
     }
 
-    if (targetContactCount < 1 || targetContactCount > 99) {
-      setError('A quantidade de contatos deve estar entre 1 e 99')
+    if (targetContactCount < 20 || targetContactCount > 99) {
+      setError('A quantidade de contatos deve estar entre 20 e 99')
       return
     }
 
@@ -1567,7 +1652,7 @@ export function ListGeneratorB2B() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-3xl">Gerador de Listas B2B</h1>
+            <h1 className="text-xl sm:text-3xl">Gerencie Suas Listas de Contatos</h1>
             <p className="text-sm text-muted-foreground">
               Encontre empresas com dados reais e atualizados
             </p>
@@ -1719,10 +1804,10 @@ export function ListGeneratorB2B() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
-                  Critérios de Busca
+                  Gere Listas Segmentadas
                 </CardTitle>
                 <CardDescription>
-                  Defina os parâmetros para encontrar empresas. O sistema extrairá automaticamente emails dos websites encontrados.
+                  Defina abaixo o nicho e regiões, e o VAI irá gerar os contatos
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1862,7 +1947,7 @@ export function ListGeneratorB2B() {
                   <Input
                     id="contact-count"
                     type="number"
-                    min="1"
+                    min="20"
                     max="99"
                     value={targetContactCount}
                     onChange={(e) => {
@@ -1872,18 +1957,18 @@ export function ListGeneratorB2B() {
                       } else {
                         const num = parseInt(value)
                         if (!isNaN(num)) {
-                          setTargetContactCount(Math.min(99, Math.max(1, num)))
+                          setTargetContactCount(Math.min(99, Math.max(20, num)))
                         }
                       }
                     }}
                     onBlur={(e) => {
-                      if (e.target.value === '' || parseInt(e.target.value) < 1) {
-                        setTargetContactCount(10)
+                      if (e.target.value === '' || parseInt(e.target.value) < 20) {
+                        setTargetContactCount(20)
                       }
                     }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Mínimo: 1 | Máximo: 99
+                    Mínimo: 20 | Máximo: 99
                   </p>
                 </div>
               </CardContent>

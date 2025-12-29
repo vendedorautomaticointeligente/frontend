@@ -1,11 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from "react"
-import { Search, Phone, Video, MoreVertical, Smile, Paperclip, Mic, Send, Loader2, X, AlertCircle, RefreshCw, UserCircle } from "lucide-react"
+import { Search, MoreVertical, Send, Loader2, X, RefreshCw, UserCircle, Trash2 } from "lucide-react"
 import { Input } from "./ui/input"
 import { Button } from "./ui/button"
 import { Avatar, AvatarFallback } from "./ui/avatar"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter } from "./ui/alert-dialog"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
 import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
+import { fetchWithInterceptors } from "../utils/fetchInterceptor"
 import { getApiUrl } from "../utils/apiConfig"
 import { formatCurrency } from "../utils/formatters"
 
@@ -53,10 +56,12 @@ type Conversation = {
 const resolveApiUrl = getApiUrl
 
 export function ConversationsPage() {
-  const { accessToken, user } = useAuth()
+  const { accessToken } = useAuth()
   const baseUrl = resolveApiUrl()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const eventSourceRef = useRef<EventSource | null>(null)
+  const audioInputRef = useRef<HTMLInputElement>(null)
+  const imageInputRef = useRef<HTMLInputElement>(null)
 
   // STATE - Apenas 3 coisas necessárias
   const [conversations, setConversations] = useState<Conversation[]>([])
@@ -93,6 +98,20 @@ export function ConversationsPage() {
   const [isSending, setIsSending] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [messageInput, setMessageInput] = useState('')
+  
+  // 🆕 MEDIA UPLOAD STATES
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false)
+  const [mediaPreview, setMediaPreview] = useState<{
+    type: 'audio' | 'image' | null
+    file: File | null
+    preview: string | null
+    caption: string
+  }>({ type: null, file: null, preview: null, caption: '' })
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  
+  // STATE - Delete confirmation dialog
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // 🔥 CACHE: Evitar recarregamentos desnecessários
   const messagesCache = useRef<Map<string, Message[]>>(new Map())
@@ -287,6 +306,160 @@ export function ConversationsPage() {
       setIsSending(false)
     }
   }, [messageInput, selectedConversation, accessToken, baseUrl, isSending])
+
+  // ============================================================================
+  // FUNÇÃO 2.5: Upload de Mídia (🎙️ 📷)
+  // ============================================================================
+
+  /**
+   * Validar arquivo de mídia
+   * - Áudio: MP3, OGG, WAV (máx 10MB)
+   * - Imagem: JPG, PNG, GIF, WebP (máx 5MB)
+   */
+  const validateMediaFile = (file: File, type: 'audio' | 'image'): { valid: boolean; error?: string } => {
+    const MAX_AUDIO_SIZE = 10 * 1024 * 1024 // 10MB
+    const MAX_IMAGE_SIZE = 5 * 1024 * 1024  // 5MB
+
+    if (type === 'audio') {
+      const allowedTypes = ['audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/webm']
+      const maxSize = MAX_AUDIO_SIZE
+
+      if (!allowedTypes.includes(file.type)) {
+        return { valid: false, error: 'Formato de áudio não suportado. Use MP3, OGG, WAV ou WebM.' }
+      }
+
+      if (file.size > maxSize) {
+        return { valid: false, error: 'Arquivo de áudio muito grande. Máximo 10MB.' }
+      }
+
+      return { valid: true }
+    }
+
+    if (type === 'image') {
+      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+      const maxSize = MAX_IMAGE_SIZE
+
+      if (!allowedTypes.includes(file.type)) {
+        return { valid: false, error: 'Formato de imagem não suportado. Use JPG, PNG, GIF ou WebP.' }
+      }
+
+      if (file.size > maxSize) {
+        return { valid: false, error: 'Arquivo de imagem muito grande. Máximo 5MB.' }
+      }
+
+      return { valid: true }
+    }
+
+    return { valid: false, error: 'Tipo de mídia desconhecido.' }
+  }
+
+  /**
+   * Tratar seleção de arquivo (áudio ou imagem)
+   */
+  const handleMediaFileSelected = async (file: File, type: 'audio' | 'image') => {
+    setUploadError(null)
+
+    // 1️⃣ Validar arquivo
+    const validation = validateMediaFile(file, type)
+    if (!validation.valid) {
+      setUploadError(validation.error || 'Erro ao validar arquivo')
+      return
+    }
+
+    // 2️⃣ Criar preview
+    let preview: string | null = null
+    try {
+      if (type === 'image') {
+        // Preview de imagem
+        preview = URL.createObjectURL(file)
+      } else if (type === 'audio') {
+        // Para áudio, apenas gerar URL para reproduzir
+        preview = URL.createObjectURL(file)
+      }
+    } catch (error) {
+      console.error('Erro ao criar preview:', error)
+    }
+
+    // 3️⃣ Armazenar no state
+    setMediaPreview({
+      type,
+      file,
+      preview,
+      caption: ''
+    })
+  }
+
+  /**
+   * Enviar arquivo de mídia para backend
+   */
+  const handleSendMedia = useCallback(async () => {
+    if (!selectedConversation || !mediaPreview.file || isUploadingMedia) return
+
+    setIsUploadingMedia(true)
+    setUploadError(null)
+
+    const formData = new FormData()
+    formData.append('file', mediaPreview.file)
+    formData.append('caption', mediaPreview.caption)
+    formData.append('type', mediaPreview.type || 'image')
+
+    try {
+      console.log('📤 Enviando mídia:', {
+        type: mediaPreview.type,
+        fileName: mediaPreview.file.name,
+        fileSize: mediaPreview.file.size,
+        endpoint: `${baseUrl}/conversations/${selectedConversation.id}/send-media`
+      })
+
+      const response = await fetchWithInterceptors(
+        `${baseUrl}/conversations/${selectedConversation.id}/send-media`,
+        {
+          method: 'POST',
+          body: formData
+          // Não enviar Authorization aqui - fetchWithInterceptors já adiciona
+        }
+      )
+
+      if (!response?.ok) {
+        console.error('❌ Erro HTTP:', response?.status, response?.statusText)
+        const errorText = await response?.text()
+        console.error('❌ Resposta do servidor:', errorText)
+        setUploadError(`Erro ao enviar mídia. Status: ${response?.status}`)
+        return
+      }
+
+      const data = await response.json()
+      console.log('✅ Resposta do backend:', data)
+
+      if (data.status === 'success') {
+        // Limpar preview
+        if (mediaPreview.preview) {
+          URL.revokeObjectURL(mediaPreview.preview)
+        }
+        setMediaPreview({ type: null, file: null, preview: null, caption: '' })
+        toast.success('Mídia enviada com sucesso!')
+      } else {
+        console.error('❌ Status não sucesso:', data)
+        setUploadError(data.message || 'Erro ao enviar mídia.')
+      }
+    } catch (error) {
+      console.error('❌ Erro ao enviar mídia:', error)
+      setUploadError('Erro ao conectar ao servidor. Verifique sua conexão.')
+    } finally {
+      setIsUploadingMedia(false)
+    }
+  }, [selectedConversation, mediaPreview, baseUrl, isUploadingMedia])
+
+  /**
+   * Cancelar upload e limpar preview
+   */
+  const handleCancelMediaUpload = () => {
+    if (mediaPreview.preview) {
+      URL.revokeObjectURL(mediaPreview.preview)
+    }
+    setMediaPreview({ type: null, file: null, preview: null, caption: '' })
+    setUploadError(null)
+  }
 
   // ============================================================================
   // EFEITO 1: Carregar conversas uma vez no mount
@@ -581,8 +754,16 @@ export function ConversationsPage() {
     }
   }, [accessToken, baseUrl, newProductData])
 
-  const openCrmPanel = useCallback(() => {
+  const toggleCrmPanel = useCallback(() => {
     if (!selectedConversation) return
+
+    // Se painel já está aberto, apenas fechar
+    if (isCrmPanelOpen) {
+      setIsCrmPanelOpen(false)
+      return
+    }
+
+    // Caso contrário, preencher dados e abrir
 
     // Preencher formulário com dados existentes do lead ou dados da conversa
     if (selectedConversation.lead) {
@@ -622,7 +803,7 @@ export function ConversationsPage() {
     }
 
     setIsCrmPanelOpen(true)
-  }, [selectedConversation, loadLeadProducts, loadAvailableProducts, availableProducts.length])
+  }, [selectedConversation, isCrmPanelOpen, loadLeadProducts, loadAvailableProducts, availableProducts.length])
 
   const closeCrmPanel = useCallback(() => {
     setIsCrmPanelOpen(false)
@@ -635,10 +816,9 @@ export function ConversationsPage() {
   useEffect(() => {
     if (selectedConversation) {
       loadMessages()
-      // 🔥 ABRIR PAINEL CRM AUTOMATICAMENTE ao selecionar conversa
-      openCrmPanel()
+      // Painel CRM não abre automaticamente - apenas ao clicar no ícone
     }
-  }, [selectedConversation, loadMessages, openCrmPanel])
+  }, [selectedConversation, loadMessages])
 
   const saveLead = useCallback(async () => {
     if (!selectedConversation || !accessToken) return
@@ -770,6 +950,59 @@ export function ConversationsPage() {
   }, [selectedConversation, accessToken, baseUrl, closeCrmPanel])
 
   // ============================================================================
+  // FUNÇÃO: Deletar Conversa (Soft Delete - Arquivo Morto)
+  // ============================================================================
+
+  const handleDeleteConversation = useCallback(async () => {
+    if (!selectedConversation || !accessToken) return
+
+    try {
+      setIsDeleting(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/conversations/${selectedConversation.id}`,
+        {
+          method: 'DELETE',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`
+          }
+        },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        const errorData = await response?.json()
+        throw new Error(errorData?.message || 'Erro ao excluir conversa')
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Remover conversa da lista localmente
+        setConversations(prev => prev.filter(conv => conv.id !== selectedConversation.id))
+        
+        // Selecionar a primeira conversa restante ou null
+        setSelectedConversation(null)
+        
+        // Limpar mensagens
+        setMessages([])
+        
+        // Fechar dialog
+        setIsDeleteDialogOpen(false)
+        
+        toast.success('Conversa excluída com sucesso')
+      } else {
+        throw new Error(data.message || 'Erro ao excluir conversa')
+      }
+    } catch (error) {
+      console.error('Erro ao deletar conversa:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao excluir conversa')
+    } finally {
+      setIsDeleting(false)
+    }
+  }, [selectedConversation, accessToken, baseUrl])
+
+  // ============================================================================
   // RENDER: Lista de Conversas
   // ============================================================================
 
@@ -896,21 +1129,28 @@ export function ConversationsPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={openCrmPanel}
+                  onClick={toggleCrmPanel}
                   className={`h-8 w-8 p-0 ${isCrmPanelOpen ? 'bg-blue-100 text-blue-600' : ''}`}
                   title={selectedConversation.lead ? 'Editar lead no CRM' : 'Criar lead no CRM'}
                 >
                   <UserCircle className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Phone className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <Video className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                  <MoreVertical className="w-4 h-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <MoreVertical className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                      className="text-red-600 cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Excluir conversa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
 
@@ -958,8 +1198,101 @@ export function ConversationsPage() {
             </div>
 
             {/* Input - Compacto */}
-            <div className="bg-white border-t border-gray-200/60 p-3 flex-shrink-0">
-              <div className="flex gap-2">
+            <div className="bg-white border-t border-gray-200/60 p-3 flex-shrink-0 space-y-3">
+              {/* 🎙️ 📷 PASSO 5: Preview de Mídia (se houver) */}
+              {mediaPreview.type && (
+                <div className="border border-gray-300 rounded-lg p-3 bg-gray-50">
+                  <div className="flex items-start justify-between mb-2">
+                    <h3 className="font-semibold text-sm">
+                      {mediaPreview.type === 'audio' ? '🎙️ Áudio' : '📷 Imagem'}
+                    </h3>
+                    <button
+                      onClick={handleCancelMediaUpload}
+                      className="text-gray-500 hover:text-red-500 text-lg font-bold"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {/* Preview de Imagem - Thumbnail Responsivo */}
+                  {mediaPreview.type === 'image' && mediaPreview.preview && (
+                    <div className="mb-3 rounded-lg overflow-hidden">
+                      <img 
+                        src={mediaPreview.preview} 
+                        alt="Preview" 
+                        className="w-20 h-20 sm:w-24 sm:h-24 md:w-28 md:h-28 object-cover rounded" 
+                      />
+                    </div>
+                  )}
+
+                  {/* Preview de Áudio */}
+                  {mediaPreview.type === 'audio' && mediaPreview.preview && (
+                    <div className="mb-3 bg-white p-2 rounded border border-gray-200">
+                      <audio
+                        src={mediaPreview.preview}
+                        controls
+                        className="w-full"
+                        style={{ height: '32px' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Nome do Arquivo */}
+                  <p className="text-xs text-gray-600 mb-3 break-all">
+                    📁 {mediaPreview.file?.name}
+                  </p>
+
+                  {/* Caption (Opcional) */}
+                  <Input
+                    type="text"
+                    placeholder="Adicione uma legenda (opcional)"
+                    value={mediaPreview.caption}
+                    onChange={(e) =>
+                      setMediaPreview(prev => ({ ...prev, caption: e.target.value }))
+                    }
+                    className="mb-3 text-sm"
+                  />
+
+                  {/* Erro de Upload */}
+                  {uploadError && (
+                    <div className="mb-3 p-2 bg-red-100 border border-red-300 rounded text-sm text-red-700">
+                      {uploadError}
+                    </div>
+                  )}
+
+                  {/* Botões Ação */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={handleSendMedia}
+                      disabled={isUploadingMedia || !mediaPreview.file}
+                      className="flex-1 bg-green-500 hover:bg-green-600"
+                    >
+                      {isUploadingMedia ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="w-4 h-4 mr-2" />
+                          Enviar
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleCancelMediaUpload}
+                      variant="outline"
+                      disabled={isUploadingMedia}
+                      className="flex-1"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Input de Texto + Botão Enviar */}
+              <div className="flex items-end gap-2">
                 <div className="flex-1 flex items-end gap-2 bg-gray-100 rounded-lg px-3 py-2">
                   <Input
                     type="text"
@@ -978,7 +1311,7 @@ export function ConversationsPage() {
                 <Button
                   onClick={handleSendMessage}
                   disabled={isSending || !messageInput.trim()}
-                  className="bg-blue-500 hover:bg-blue-600 h-10 w-10 p-0"
+                  className="bg-blue-500 hover:bg-blue-600 h-10 w-10 p-0 flex-shrink-0"
                 >
                   {isSending ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -998,6 +1331,11 @@ export function ConversationsPage() {
         {/* CRM Panel - Coluna lateral */}
         {isCrmPanelOpen && selectedConversation && (
           <div className="w-80 bg-white border-l border-gray-200 flex flex-col shadow-lg">
+            {/* CRM Super Header - Tarja com título */}
+            <div className="bg-blue-600 text-white px-4 py-2 flex-shrink-0">
+              <h2 className="font-semibold text-sm">CADASTRO DE OPORTUNIDADE</h2>
+            </div>
+
             {/* CRM Header */}
             <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
               <h3 className="font-semibold text-sm">
@@ -1014,7 +1352,7 @@ export function ConversationsPage() {
             </div>
 
             {/* CRM Form */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto pt-0 px-4 pb-4 space-y-4">
               <div className="space-y-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -1299,6 +1637,43 @@ export function ConversationsPage() {
           </div>
         )}
       </div>
+
+      {/* Delete Conversation Confirmation Dialog */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir conversa?</AlertDialogTitle>
+            <AlertDialogDescription>
+              A conversa com <strong>{selectedConversation?.contact_name}</strong> será excluída. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-blue-600 hover:bg-blue-700 text-white border-0">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConversation}
+              disabled={isDeleting}
+              style={{
+                backgroundColor: '#dc2626',
+                color: 'white'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#b91c1c'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                  Excluindo...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Excluir
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

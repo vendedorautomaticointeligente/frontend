@@ -101,8 +101,14 @@ export const interceptRequest = async (
       init.headers = {}
     }
 
+    // Usar Headers object para gerenciar headers corretamente
     const headers = new Headers(init.headers)
-    headers.set('Authorization', `Bearer ${currentToken}`)
+    
+    // Só adicionar Authorization se não existir já
+    if (!headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${currentToken}`)
+    }
+    
     init.headers = headers
 
     // Se token está próximo de expirar, renovar em background
@@ -143,8 +149,20 @@ export const fetchWithInterceptors = async (
     // Interceptar request
     const { input: finalInput, init: finalInit } = await interceptRequest(input, init)
 
+    // Debug logging para FormData
+    if (finalInit.body instanceof FormData) {
+      console.log('📤 [fetchWithInterceptors] FormData request:', {
+        url: String(finalInput),
+        method: finalInit.method,
+        headers: Object.fromEntries(new Headers(finalInit.headers).entries()),
+        hasFile: true
+      })
+    }
+
     // Fazer fetch
+    console.log('📡 Enviando requisição:', { url: String(finalInput), method: finalInit.method })
     const response = await fetch(finalInput, finalInit)
+    console.log('📥 Resposta recebida:', { status: response.status, statusText: response.statusText })
 
     // Interceptar response
     const finalResponse = await interceptResponse(response)
