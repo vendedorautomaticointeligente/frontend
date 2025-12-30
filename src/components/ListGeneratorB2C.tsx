@@ -9,6 +9,7 @@ import { Alert, AlertDescription } from "./ui/alert"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog"
 import { Progress } from "./ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+import { ErrorModal } from "./ErrorModal"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { formatNumber } from "../utils/formatters"
 import { getApiUrl } from "../utils/apiConfig"
@@ -89,7 +90,7 @@ export function ListGeneratorB2C() {
   const [location, setLocation] = useState("")
   const [minFollowers, setMinFollowers] = useState<number>(0)
   const [maxFollowers, setMaxFollowers] = useState<number>(0)
-  const [targetContactCount, setTargetContactCount] = useState<number>(10)
+  const [targetContactCount, setTargetContactCount] = useState<number>(20)
   
   // Follower extraction fields
   const [followerLink1, setFollowerLink1] = useState("")
@@ -158,6 +159,10 @@ export function ListGeneratorB2C() {
   // Messages
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  
+  // Limit exceeded error modal
+  const [showLimitError, setShowLimitError] = useState(false)
+  const [limitErrorData, setLimitErrorData] = useState<any>(null)
 
   const baseUrl = getApiUrl()
 
@@ -212,10 +217,14 @@ export function ListGeneratorB2C() {
         // Try to parse as JSON to get better error details
         try {
           const errorData = JSON.parse(errorText)
-          const errorMsg = errorData.details || errorData.error || errorText
-          throw new Error(errorMsg)
-        } catch {
-          throw new Error(errorText)
+          const error: any = new Error(errorData.message || errorData.details || errorData.error || errorText)
+          error.status = response.status
+          error.errorData = errorData
+          throw error
+        } catch (e: any) {
+          const error: any = new Error(errorText)
+          error.status = response.status
+          throw error
         }
       }
 
@@ -320,8 +329,17 @@ export function ListGeneratorB2C() {
         throw new Error(data.message || 'Erro ao criar lista')
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating B2C list:', error)
+      
+      // Check if it's a limit exceeded error (403 status)
+      if (error.status === 403 && error.errorData && error.errorData.error === 'LIMIT_EXCEEDED') {
+        setLimitErrorData(error.errorData)
+        setShowLimitError(true)
+        setShowNewListDialog(false)
+        return
+      }
+      
       setError(`Erro ao criar lista: ${error.message}`)
     } finally {
       setIsCreatingList(false)
@@ -2274,6 +2292,18 @@ export function ListGeneratorB2C() {
           </div>
         </div>
       </div>
+
+      {/* Limit Error Modal */}
+      <ErrorModal
+        isOpen={showLimitError}
+        onClose={() => setShowLimitError(false)}
+        title="Limite de Campanhas Atingido"
+        message={limitErrorData?.message || "Você atingiu o limite de listas/campanhas para seu plano"}
+        plan={limitErrorData?.plan}
+        currentCount={limitErrorData?.current_count}
+        maxLimit={limitErrorData?.max_limit}
+        limitName={limitErrorData?.limit_name}
+      />
     </div>
   )
 }

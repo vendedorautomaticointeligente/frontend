@@ -69,6 +69,8 @@ export function ConversationsPage() {
   const [messages, setMessages] = useState<Message[]>([])
 
   // STATE - Filtro por instância (NOVO)
+  // 🔥 IMPORTANTE: Por padrão, mostrar TODAS as instâncias
+  // Quando usuário reconecta com nova instância, ele pode acessar conversas de instâncias anteriores
   const [selectedInstance, setSelectedInstance] = useState<string>('') // '' = todas as instâncias
   const [availableInstances, setAvailableInstances] = useState<string[]>([])
 
@@ -123,33 +125,51 @@ export function ConversationsPage() {
       setSseErrors(0)
       setUsePolling(false) // Disable polling if SSE is working
 
+      // 🔥 HELPER: Normalizar conversation_id para string para comparação consistente
+      const normalizeId = (id: any) => String(id)
+
       // 🔥 OTIMIZADO: Processamento ultra-rápido sem logs desnecessários
       if (event.type === 'message_received') {
         console.log('📨 SSE: Processando message_received', event.data);
 
         const data = event.data
+        const messageConvId = normalizeId(data.conversation_id)
+        const selectedConvId = normalizeId(selectedConversation?.id)
 
         // Se mensagem é para conversa atual, adicionar instantaneamente
-        if (selectedConversation?.id === data.conversation_id?.toString()) {
+        if (messageConvId === selectedConvId) {
           console.log('✅ SSE: Adicionando mensagem à conversa atual', {
-            conversationId: selectedConversation.id,
+            conversationId: selectedConvId,
             messageText: data.text?.substring(0, 50)
           });
 
-          setMessages(prev => [...prev, {
-            id: data.message_id?.toString() || `sse-${Date.now()}`,
-            text: data.text || '',
-            timestamp: new Date().toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit'
-            }),
-            isSent: false,
-            status: 'read'
-          }])
+          // ✅ EVITAR DUPLICAÇÃO: Verificar se mensagem já existe
+          setMessages(prev => {
+            const messageId = normalizeId(data.message_id)
+            const alreadyExists = prev.some(m => normalizeId(m.id) === messageId)
+            
+            if (alreadyExists) {
+              console.log('⚠️ SSE: Mensagem duplicada detectada, ignorando', { messageId })
+              return prev
+            }
+
+            return [...prev, {
+              id: messageId || `sse-${Date.now()}`,
+              text: data.text || '',
+              timestamp: new Date(data.created_at || Date.now()).toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              isSent: data.direction === 'sent' || false,
+              status: data.direction === 'sent' ? 'sent' : 'read',
+              message_type: data.message_type,
+              media_data: data.media_data
+            }]
+          })
         } else {
           console.log('🔄 SSE: Mensagem para outra conversa, recarregando lista', {
-            messageConversationId: data.conversation_id,
-            currentConversationId: selectedConversation?.id
+            messageConversationId: messageConvId,
+            currentConversationId: selectedConvId
           });
 
           // Se não é para conversa atual, recarregar lista silenciosamente
@@ -158,24 +178,40 @@ export function ConversationsPage() {
       } else if (event.type === 'message_optimistic') {
         // 🔥 OTIMIZADO: Atualização otimista ultra-rápida
         const data = event.data
-        if (selectedConversation?.id === data.conversation_id?.toString()) {
-          setMessages(prev => [...prev, {
-            id: data.message_id?.toString() || `opt-${Date.now()}`,
-            text: data.text || '',
-            timestamp: new Date().toLocaleTimeString('pt-BR', {
-              hour: '2-digit',
-              minute: '2-digit'
-            }),
-            isSent: true,
-            status: 'sending'
-          }])
+        const messageConvId = normalizeId(data.conversation_id)
+        const selectedConvId = normalizeId(selectedConversation?.id)
+        
+        if (messageConvId === selectedConvId) {
+          setMessages(prev => {
+            const messageId = normalizeId(data.message_id)
+            const alreadyExists = prev.some(m => normalizeId(m.id) === messageId)
+            
+            if (alreadyExists) {
+              return prev
+            }
+
+            return [...prev, {
+              id: messageId || `opt-${Date.now()}`,
+              text: data.text || '',
+              timestamp: new Date().toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
+              }),
+              isSent: true,
+              status: 'sending',
+              message_type: data.message_type,
+              media_data: data.media_data
+            }]
+          })
         }
       } else if (event.type === 'message_sent') {
         // 🔥 OTIMIZADO: Confirmação de envio ultra-rápida
         const data = event.data
+        const messageId = normalizeId(data.message_id)
+        
         setMessages(prev =>
           prev.map(m =>
-            m.id === data.message_id?.toString()
+            normalizeId(m.id) === messageId
               ? { ...m, status: 'sent' }
               : m
           )
@@ -183,9 +219,11 @@ export function ConversationsPage() {
       } else if (event.type === 'message_failed') {
         // 🔥 OTIMIZADO: Tratamento de erro ultra-rápido
         const data = event.data
+        const messageId = normalizeId(data.message_id)
+        
         setMessages(prev =>
           prev.map(m =>
-            m.id === data.message_id?.toString()
+            normalizeId(m.id) === messageId
               ? { ...m, status: 'failed' }
               : m
           )
@@ -194,14 +232,20 @@ export function ConversationsPage() {
       // 🆕 PASSO 5: Handlers para typing indicator de segmentos
       else if (event.type === 'response_segment_start') {
         // Começar animação de typing
-        if (selectedConversation?.id === event.data?.conversation_id?.toString()) {
+        const messageConvId = normalizeId(event.data?.conversation_id)
+        const selectedConvId = normalizeId(selectedConversation?.id)
+        
+        if (messageConvId === selectedConvId) {
           setIsAgentTyping(true)
           console.log('⌨️ SSE: Agente começou a escrever (segment start)')
         }
       }
       else if (event.type === 'response_segment_end') {
         // Parar animação de typing
-        if (selectedConversation?.id === event.data?.conversation_id?.toString()) {
+        const messageConvId = normalizeId(event.data?.conversation_id)
+        const selectedConvId = normalizeId(selectedConversation?.id)
+        
+        if (messageConvId === selectedConvId) {
           setIsAgentTyping(false)
           console.log('✅ SSE: Agente finalizou segmento (segment end)')
         }
@@ -253,6 +297,9 @@ export function ConversationsPage() {
           hasEvents: data.has_events
         })
 
+        // 🔥 HELPER: Normalizar conversation_id para string para comparação consistente
+        const normalizeId = (id: any) => String(id)
+
         // Processar eventos recebidos via polling
         if (data.events && Array.isArray(data.events)) {
           data.events.forEach((event: any) => {
@@ -260,23 +307,40 @@ export function ConversationsPage() {
 
             if (event.type === 'message_received') {
               const eventData = event.data
+              const messageConvId = normalizeId(eventData.conversation_id)
+              const selectedConvId = normalizeId(selectedConversation?.id)
 
               // Se mensagem é para conversa atual, adicionar
-              if (selectedConversation?.id === eventData.conversation_id?.toString()) {
+              if (messageConvId === selectedConvId) {
                 console.log('✅ Polling: Adicionando mensagem à conversa atual')
 
-                setMessages(prev => [...prev, {
-                  id: eventData.message_id?.toString() || `poll-${Date.now()}`,
-                  text: eventData.text || '',
-                  timestamp: new Date().toLocaleTimeString('pt-BR', {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  }),
-                  isSent: false,
-                  status: 'read'
-                }])
+                setMessages(prev => {
+                  const messageId = normalizeId(eventData.message_id)
+                  const alreadyExists = prev.some(m => normalizeId(m.id) === messageId)
+                  
+                  if (alreadyExists) {
+                    console.log('⚠️ Polling: Mensagem duplicada detectada, ignorando', { messageId })
+                    return prev
+                  }
+
+                  return [...prev, {
+                    id: messageId || `poll-${Date.now()}`,
+                    text: eventData.text || '',
+                    timestamp: new Date(eventData.created_at || Date.now()).toLocaleTimeString('pt-BR', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    }),
+                    isSent: eventData.direction === 'sent' || false,
+                    status: eventData.direction === 'sent' ? 'sent' : 'read',
+                    message_type: eventData.message_type,
+                    media_data: eventData.media_data
+                  }]
+                })
               } else {
-                console.log('🔄 Polling: Mensagem para outra conversa, recarregando lista')
+                console.log('🔄 Polling: Mensagem para outra conversa, recarregando lista', {
+                  messageConversationId: messageConvId,
+                  currentConversationId: selectedConvId
+                })
 
                 // Se não é para conversa atual, recarregar lista
                 loadConversations(true, false)
@@ -438,9 +502,23 @@ export function ConversationsPage() {
             minute: '2-digit'
           }),
           isSent: m.direction === 'sent',
-          status: m.direction === 'sent' ? 'read' : undefined
+          status: m.direction === 'sent' ? 'read' : undefined,
+          message_type: m.message_type,
+          media_data: m.media_data
         }))
+        console.log('✅ [loadMessages] Mensagens carregadas:', {
+          total: msgs.length,
+          conversationId: selectedConversation?.id,
+          sample: msgs.slice(0, 2)
+        })
         setMessages(msgs)
+      } else {
+        console.error('❌ [loadMessages] Resposta inválida:', {
+          status: data.status,
+          isArray: Array.isArray(data.data),
+          dataKeys: Object.keys(data),
+          data
+        })
       }
     } catch (error) {
       console.error('Erro ao carregar mensagens:', error)
@@ -816,44 +894,47 @@ export function ConversationsPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Conversations List - ESTREITA */}
         <div className="w-64 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg overflow-hidden flex-shrink-0">
-          {/* Instance Tabs - NOVO */}
+          {/* Instance Dropdown Filter - NOVO */}
+          {/* 🔥 Mostrar filtro de instâncias quando há múltiplas conectadas */}
+          {/* Usuários com múltiplas instâncias podem ver conversas de todas elas via dropdown */}
           {availableInstances.length > 1 && (
-            <div className="flex-shrink-0 border-b border-gray-200/60 bg-gradient-to-r from-white/90 to-blue-50/50">
-              <div className="flex gap-1 overflow-x-auto p-2 scrollbar-hide">
-                {/* Tab: Todas as instâncias */}
-                <button
-                  onClick={() => setSelectedInstance('')}
-                  className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
-                    selectedInstance === ''
-                      ? 'bg-blue-500 text-white'
-                      : 'bg-gray-200/50 text-gray-700 hover:bg-gray-300/50'
-                  }`}
-                >
-                  📱 Todas ({conversations.length})
-                </button>
+            <div className="flex-shrink-0 border-b border-gray-200/60 bg-gradient-to-r from-white/90 to-blue-50/50 p-3">
+              <Select value={selectedInstance} onValueChange={setSelectedInstance}>
+                <SelectTrigger className="w-full bg-white border-gray-300 text-sm">
+                  <SelectValue 
+                    placeholder="Todas as instâncias"
+                    defaultValue=""
+                  />
+                </SelectTrigger>
+                <SelectContent align="start" className="w-[calc(100%-24px)]">
+                  {/* Opção: Todas as instâncias */}
+                  <SelectItem value="" className="cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <span>📱 Todas as instâncias</span>
+                      <span className="text-xs text-gray-500 ml-1">({conversations.length})</span>
+                    </span>
+                  </SelectItem>
 
-                {/* Tabs: Uma por instância */}
-                {availableInstances.map((instance) => {
-                  const instanceConvCount = conversations.filter(
-                    c => c.whatsapp_instance_name === instance
-                  ).length
-                  
-                  return (
-                    <button
-                      key={instance}
-                      onClick={() => setSelectedInstance(instance)}
-                      className={`px-3 py-2 rounded-md text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${
-                        selectedInstance === instance
-                          ? 'bg-blue-500 text-white'
-                          : 'bg-gray-200/50 text-gray-700 hover:bg-gray-300/50'
-                      }`}
-                      title={`${instance} - ${instanceConvCount} conversas`}
-                    >
-                      📱 {instance.substring(0, 15)}... ({instanceConvCount})
-                    </button>
-                  )
-                })}
-              </div>
+                  {/* Separador */}
+                  <div className="my-1 border-t border-gray-200" />
+
+                  {/* Opções: Uma por instância */}
+                  {availableInstances.map((instance) => {
+                    const instanceConvCount = conversations.filter(
+                      c => c.whatsapp_instance_name === instance
+                    ).length
+                    
+                    return (
+                      <SelectItem key={instance} value={instance} className="cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <span>📱 {instance}</span>
+                          <span className="text-xs text-gray-500 ml-1">({instanceConvCount})</span>
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
             </div>
           )}
 

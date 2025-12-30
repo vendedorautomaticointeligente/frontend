@@ -10,18 +10,69 @@ import { TroubleshootingGuide } from "./TroubleshootingGuide"
 import { Zap, Loader2, AlertCircle, Mail, Lock, User, Building, HelpCircle } from "lucide-react"
 import { toast } from "sonner"
 
+// 🎭 Funções de formatação de máscaras
+const formatCPF = (value: string): string => {
+  // Remove tudo que não é dígito
+  const digits = value.replace(/\D/g, '')
+  // Limita a 11 dígitos
+  const limited = digits.slice(0, 11)
+  // Formata como XXX.XXX.XXX-XX
+  if (limited.length <= 3) return limited
+  if (limited.length <= 6) return `${limited.slice(0, 3)}.${limited.slice(3)}`
+  if (limited.length <= 9) return `${limited.slice(0, 3)}.${limited.slice(3, 6)}.${limited.slice(6)}`
+  return `${limited.slice(0, 3)}.${limited.slice(3, 6)}.${limited.slice(6, 9)}-${limited.slice(9)}`
+}
+
+const formatWhatsApp = (value: string): string => {
+  // Remove tudo que não é dígito
+  const digits = value.replace(/\D/g, '')
+  // Limita a 11 dígitos
+  const limited = digits.slice(0, 11)
+  // Formata como (XX) XXXXX-XXXX ou (XX) XXXX-XXX
+  if (limited.length <= 2) return limited
+  if (limited.length <= 7) return `(${limited.slice(0, 2)}) ${limited.slice(2)}`
+  return `(${limited.slice(0, 2)}) ${limited.slice(2, 7)}-${limited.slice(7)}`
+}
+
+const formatDateOfBirth = (value: string): string => {
+  // Remove tudo que não é dígito
+  const digits = value.replace(/\D/g, '')
+  // Limita a 8 dígitos
+  const limited = digits.slice(0, 8)
+  // Formata como DD/MM/YYYY
+  if (limited.length <= 2) return limited
+  if (limited.length <= 4) return `${limited.slice(0, 2)}/${limited.slice(2)}`
+  return `${limited.slice(0, 2)}/${limited.slice(2, 4)}/${limited.slice(4)}`
+}
+
 export function AuthForm() {
   const { signIn, signUp, loading, loginState } = useAuth()
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    passwordConfirm: '',
     name: '',
+    last_name: '',
+    cpf: '',
+    date_of_birth: '',
+    whatsapp: '',
     company: ''
   })
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+    let formattedValue = value
+    
+    // Aplicar formatação conforme o campo
+    if (field === 'cpf') {
+      formattedValue = formatCPF(value)
+    } else if (field === 'whatsapp') {
+      formattedValue = formatWhatsApp(value)
+    } else if (field === 'date_of_birth') {
+      formattedValue = formatDateOfBirth(value)
+    }
+    
+    setFormData(prev => ({ ...prev, [field]: formattedValue }))
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }))
     }
@@ -46,8 +97,8 @@ export function AuthForm() {
     e.preventDefault()
     setErrors({})
 
-    if (!formData.email || !formData.password || !formData.name) {
-      setErrors({ general: 'Email, senha e nome são obrigatórios' })
+    if (!formData.email || !formData.password || !formData.name || !formData.last_name || !formData.cpf || !formData.date_of_birth || !formData.whatsapp) {
+      setErrors({ general: 'Todos os campos obrigatórios devem ser preenchidos' })
       return
     }
 
@@ -56,7 +107,17 @@ export function AuthForm() {
       return
     }
 
-    const result = await signUp(formData.email, formData.password, formData.name, formData.company)
+    if (formData.password !== formData.passwordConfirm) {
+      setErrors({ passwordConfirm: 'As senhas não correspondem' })
+      return
+    }
+
+    const result = await signUp(formData.email, formData.password, formData.name, formData.company, {
+      last_name: formData.last_name,
+      cpf: formData.cpf,
+      date_of_birth: formData.date_of_birth,
+      whatsapp: formData.whatsapp
+    })
     if (!result.success) {
       setErrors({ general: result.error || 'Erro no cadastro' })
     } else {
@@ -68,7 +129,12 @@ export function AuthForm() {
       setFormData({
         email: formData.email, // Manter email para facilitar login
         password: '',
+        passwordConfirm: '',
         name: '',
+        last_name: '',
+        cpf: '',
+        date_of_birth: '',
+        whatsapp: '',
         company: ''
       })
       
@@ -188,40 +254,74 @@ export function AuthForm() {
               
               <TabsContent value="signup" className="space-y-4">
                 <form onSubmit={handleSignUp} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-name" className="flex items-center gap-2 text-sm">
+                        <User className="w-4 h-4" />
+                        Nome
+                      </Label>
+                      <Input
+                        id="signup-name"
+                        type="text"
+                        placeholder="Seu nome"
+                        value={formData.name}
+                        onChange={(e) => handleInputChange('name', e.target.value)}
+                        disabled={loading}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="signup-last-name" className="flex items-center gap-2 text-sm">
+                        <User className="w-4 h-4" />
+                        Sobrenome
+                      </Label>
+                      <Input
+                        id="signup-last-name"
+                        type="text"
+                        placeholder="Seu sobrenome"
+                        value={formData.last_name}
+                        onChange={(e) => handleInputChange('last_name', e.target.value)}
+                        disabled={loading}
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="signup-name" className="flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      Nome Completo
+                    <Label htmlFor="signup-cpf" className="text-sm">
+                      CPF (XXX.XXX.XXX-XX)
                     </Label>
                     <Input
-                      id="signup-name"
+                      id="signup-cpf"
                       type="text"
-                      placeholder="Seu nome completo"
-                      value={formData.name}
-                      onChange={(e) => handleInputChange('name', e.target.value)}
+                      placeholder="000.000.000-00"
+                      value={formData.cpf}
+                      onChange={(e) => handleInputChange('cpf', e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-10 text-sm"
+                      inputMode="numeric"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="signup-company" className="flex items-center gap-2">
-                      <Building className="w-4 h-4" />
-                      Empresa (Opcional)
+                    <Label htmlFor="signup-dob" className="text-sm">
+                      Data de Nascimento (DD/MM/AAAA)
                     </Label>
                     <Input
-                      id="signup-company"
+                      id="signup-dob"
                       type="text"
-                      placeholder="Nome da sua empresa"
-                      value={formData.company}
-                      onChange={(e) => handleInputChange('company', e.target.value)}
+                      placeholder="DD/MM/AAAA"
+                      value={formData.date_of_birth}
+                      onChange={(e) => handleInputChange('date_of_birth', e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-10 text-sm"
+                      inputMode="numeric"
                     />
                   </div>
-                  
+
                   <div className="space-y-2">
-                    <Label htmlFor="signup-email" className="flex items-center gap-2">
+                    <Label htmlFor="signup-email" className="flex items-center gap-2 text-sm">
                       <Mail className="w-4 h-4" />
                       Email
                     </Label>
@@ -232,12 +332,44 @@ export function AuthForm() {
                       value={formData.email}
                       onChange={(e) => handleInputChange('email', e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-10 text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-whatsapp" className="text-sm">
+                      WhatsApp ((XX) XXXXX-XXXX)
+                    </Label>
+                    <Input
+                      id="signup-whatsapp"
+                      type="text"
+                      placeholder="(00) 00000-0000"
+                      value={formData.whatsapp}
+                      onChange={(e) => handleInputChange('whatsapp', e.target.value)}
+                      disabled={loading}
+                      className="h-10 text-sm"
+                      inputMode="numeric"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-company" className="flex items-center gap-2 text-sm">
+                      <Building className="w-4 h-4" />
+                      Empresa (Opcional)
+                    </Label>
+                    <Input
+                      id="signup-company"
+                      type="text"
+                      placeholder="Nome da sua empresa"
+                      value={formData.company}
+                      onChange={(e) => handleInputChange('company', e.target.value)}
+                      disabled={loading}
+                      className="h-10 text-sm"
                     />
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="signup-password" className="flex items-center gap-2">
+                    <Label htmlFor="signup-password" className="flex items-center gap-2 text-sm">
                       <Lock className="w-4 h-4" />
                       Senha
                     </Label>
@@ -248,10 +380,26 @@ export function AuthForm() {
                       value={formData.password}
                       onChange={(e) => handleInputChange('password', e.target.value)}
                       disabled={loading}
-                      className="h-11"
+                      className="h-10 text-sm"
                     />
-                    {errors.password && (
-                      <div className="text-sm text-destructive">{errors.password}</div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password-confirm" className="flex items-center gap-2 text-sm">
+                      <Lock className="w-4 h-4" />
+                      Confirmar Senha
+                    </Label>
+                    <Input
+                      id="signup-password-confirm"
+                      type="password"
+                      placeholder="••••••••"
+                      value={formData.passwordConfirm}
+                      onChange={(e) => handleInputChange('passwordConfirm', e.target.value)}
+                      disabled={loading}
+                      className="h-10 text-sm"
+                    />
+                    {errors.passwordConfirm && (
+                      <div className="text-sm text-destructive">{errors.passwordConfirm}</div>
                     )}
                   </div>
 
@@ -283,7 +431,7 @@ export function AuthForm() {
                     </div>
                   )}
                   
-                  <Button type="submit" className="w-full h-11" disabled={loading}>
+                  <Button type="submit" className="w-full h-10 text-sm" disabled={loading}>
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />

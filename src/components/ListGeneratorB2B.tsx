@@ -594,8 +594,8 @@ export function ListGeneratorB2B() {
       return
     }
 
-    if (targetContactCount < 20 || targetContactCount > 99) {
-      setError('A quantidade de contatos deve estar entre 20 e 99')
+    if (targetContactCount < 20 || targetContactCount > 100) {
+      setError('A quantidade de contatos deve estar entre 20 e 100')
       return
     }
 
@@ -1948,7 +1948,7 @@ export function ListGeneratorB2B() {
                     id="contact-count"
                     type="number"
                     min="20"
-                    max="99"
+                    max="100"
                     value={targetContactCount}
                     onChange={(e) => {
                       const value = e.target.value
@@ -1957,7 +1957,7 @@ export function ListGeneratorB2B() {
                       } else {
                         const num = parseInt(value)
                         if (!isNaN(num)) {
-                          setTargetContactCount(Math.min(99, Math.max(20, num)))
+                          setTargetContactCount(Math.min(100, Math.max(20, num)))
                         }
                       }
                     }}
@@ -1968,7 +1968,7 @@ export function ListGeneratorB2B() {
                     }}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    Mínimo: 20 | Máximo: 99
+                    Mínimo: 20 | Máximo: 100
                   </p>
                 </div>
               </CardContent>
@@ -2200,7 +2200,7 @@ export function ListGeneratorB2B() {
               </CardHeader>
               <CardContent className="space-y-3 text-xs sm:text-sm text-muted-foreground">
                 <p>
-                  🤖 <strong>Geração Inteligente:</strong> O sistema permite gerar até 999 contatos por vez, fazendo buscas inteligentes para encontrar os melhores resultados.
+                  🤖 <strong>Geração Inteligente:</strong> O sistema permite gerar entre 20 a 100 contatos por vez, garantindo maior qualidade e precisão nos resultados.
                 </p>
                 <p>
                   📧 <strong>Emails Estimados:</strong> Emails marcados como "Estimado" foram gerados baseados no website. Recomendamos validar antes de usar.

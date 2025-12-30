@@ -8,7 +8,8 @@ import { toast } from "sonner"
 import { 
   Send, 
   Plus, 
-  Trash2, 
+  Archive, 
+  RotateCcw,
   Play, 
   Pause,
   Mail,
@@ -63,6 +64,8 @@ interface CampaignsPageProps {
 export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }: CampaignsPageProps = {}) {
   const { accessToken } = useAuth()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
+  const [archivedCampaigns, setArchivedCampaigns] = useState<Campaign[]>([])
+  const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active')
   const [loading, setLoading] = useState(true)
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
   
@@ -90,13 +93,25 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
   const loadCampaigns = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${baseUrl}/campaigns`, {
+      
+      // Carregar campanhas ativas
+      const activeCampaignsRes = await fetch(`${baseUrl}/campaigns`, {
+        headers: getHeaders()
+      })
+      
+      // Carregar campanhas arquivadas
+      const archivedCampaignsRes = await fetch(`${baseUrl}/campaigns/archived/list`, {
         headers: getHeaders()
       })
 
-      if (response.ok) {
-        const data = await response.json()
+      if (activeCampaignsRes.ok) {
+        const data = await activeCampaignsRes.json()
         setCampaigns(data.campaigns || [])
+      }
+
+      if (archivedCampaignsRes.ok) {
+        const data = await archivedCampaignsRes.json()
+        setArchivedCampaigns(data.campaigns || [])
       }
     } catch (error) {
       console.error('Error loading campaigns:', error)
@@ -152,12 +167,12 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
     }
   }
 
-  const deleteCampaign = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta campanha?')) return
+  const archiveCampaign = async (id: string) => {
+    if (!confirm('Tem certeza que deseja arquivar esta campanha?')) return
 
     try {
-      const response = await fetch(`${baseUrl}/campaigns/${id}`, {
-        method: 'DELETE',
+      const response = await fetch(`${baseUrl}/campaigns/${id}/archive`, {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
@@ -165,13 +180,36 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
 
       if (response.ok) {
         await loadCampaigns()
-        toast.success('Campanha excluída!')
+        toast.success('Campanha arquivada!')
       } else {
-        toast.error('Erro ao excluir campanha')
+        toast.error('Erro ao arquivar campanha')
       }
     } catch (error) {
-      console.error('Error deleting campaign:', error)
-      toast.error('Erro ao excluir campanha')
+      console.error('Error archiving campaign:', error)
+      toast.error('Erro ao arquivar campanha')
+    }
+  }
+
+  const unarchiveCampaign = async (id: string) => {
+    if (!confirm('Tem certeza que deseja restaurar esta campanha?')) return
+
+    try {
+      const response = await fetch(`${baseUrl}/campaigns/${id}/unarchive`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`
+        }
+      })
+
+      if (response.ok) {
+        await loadCampaigns()
+        toast.success('Campanha restaurada!')
+      } else {
+        toast.error('Erro ao restaurar campanha')
+      }
+    } catch (error) {
+      console.error('Error unarchiving campaign:', error)
+      toast.error('Erro ao restaurar campanha')
     }
   }
 
@@ -259,6 +297,10 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
   const totalDelivered = campaigns.reduce((sum, c) => sum + c.delivered, 0)
   const totalReplies = campaigns.reduce((sum, c) => sum + c.replied, 0)
 
+  // Dados para exibição de acordo com aba ativa
+  const displayCampaigns = activeTab === 'active' ? campaigns : archivedCampaigns
+  const displayTotal = activeTab === 'active' ? campaigns.length : archivedCampaigns.length
+
   return (
     <div className="h-full overflow-auto bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
@@ -278,6 +320,26 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
           </Button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex gap-2 border-b">
+          <Button
+            variant={activeTab === 'active' ? 'default' : 'ghost'}
+            className="rounded-b-none"
+            onClick={() => setActiveTab('active')}
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Campanhas Ativas ({campaigns.length})
+          </Button>
+          <Button
+            variant={activeTab === 'archived' ? 'default' : 'ghost'}
+            className="rounded-b-none"
+            onClick={() => setActiveTab('archived')}
+          >
+            <Archive className="w-4 h-4 mr-2" />
+            Campanhas Arquivadas ({archivedCampaigns.length})
+          </Button>
+        </div>
+
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
@@ -285,7 +347,7 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total de Campanhas</p>
-                  <p className="text-2xl font-bold">{campaigns.length}</p>
+                  <p className="text-2xl font-bold">{displayTotal}</p>
                 </div>
                 <Send className="w-8 h-8 text-blue-500" />
               </div>
@@ -330,23 +392,30 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
         </div>
 
         {/* Campaigns List */}
-        {campaigns.length === 0 ? (
+        {displayCampaigns.length === 0 ? (
           <Card>
             <CardContent className="p-12 text-center">
               <Send className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
-              <h3 className="font-semibold mb-2">Nenhuma campanha criada</h3>
+              <h3 className="font-semibold mb-2">
+                {activeTab === 'active' ? 'Nenhuma campanha ativa' : 'Nenhuma campanha arquivada'}
+              </h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Crie sua primeira campanha para começar a enviar mensagens
+                {activeTab === 'active' 
+                  ? 'Crie sua primeira campanha para começar a enviar mensagens'
+                  : 'Seus campanhas arquivadas aparecerão aqui'
+                }
               </p>
-              <Button onClick={onCreateCampaign}>
-                <Plus className="w-4 h-4 mr-2" />
-                Criar Primeira Campanha
-              </Button>
+              {activeTab === 'active' && (
+                <Button onClick={onCreateCampaign}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Criar Primeira Campanha
+                </Button>
+              )}
             </CardContent>
           </Card>
         ) : (
           <div className="grid grid-cols-1 gap-4">
-            {campaigns.map((campaign) => {
+            {displayCampaigns.map((campaign) => {
               const ChannelIcon = getChannelIcon(campaign.channel)
               const progress = campaign.totalContacts > 0 
                 ? Math.min((campaign.sent / campaign.totalContacts) * 100, 100) 
@@ -370,101 +439,118 @@ export function CampaignsPage({ onCreateCampaign, onEditCampaign, onViewStats }:
                         <CardDescription>{campaign.description}</CardDescription>
                       </div>
                       <div className="flex gap-2">
-                        {!campaign.is_active && campaign.status !== 'completed' && (
+                        {activeTab === 'active' && (
+                          <>
+                            {!campaign.is_active && campaign.status !== 'completed' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => startCampaign(campaign.id)}
+                                className="text-green-600"
+                              >
+                                <Play className="w-4 h-4 mr-1" />
+                                Iniciar
+                              </Button>
+                            )}
+                            {campaign.is_active && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => pauseCampaign(campaign.id)}
+                                className="text-yellow-600"
+                              >
+                                <Pause className="w-4 h-4 mr-1" />
+                                Pausar
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => editCampaign(campaign)}
+                              className="text-blue-600"
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Editar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => viewStats(campaign.id)}
+                              className="text-purple-600"
+                            >
+                              <BarChart3 className="w-4 h-4 mr-1" />
+                              Estatísticas
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => archiveCampaign(campaign.id)}
+                              className="text-orange-600"
+                            >
+                              <Archive className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                        {activeTab === 'archived' && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => startCampaign(campaign.id)}
+                            onClick={() => unarchiveCampaign(campaign.id)}
                             className="text-green-600"
                           >
-                            <Play className="w-4 h-4 mr-1" />
-                            Iniciar
+                            <RotateCcw className="w-4 h-4 mr-1" />
+                            Restaurar
                           </Button>
                         )}
-                        {campaign.is_active && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => pauseCampaign(campaign.id)}
-                            className="text-yellow-600"
-                          >
-                            <Pause className="w-4 h-4 mr-1" />
-                            Pausar
-                          </Button>
-                        )}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => editCampaign(campaign)}
-                          className="text-blue-600"
-                        >
-                          <Edit className="w-4 h-4 mr-1" />
-                          Editar
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => viewStats(campaign.id)}
-                          className="text-purple-600"
-                        >
-                          <BarChart3 className="w-4 h-4 mr-1" />
-                          Estatísticas
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => deleteCampaign(campaign.id)}
-                          className="text-destructive"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
                       </div>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Status de processamento ativo */}
-                    {campaign.is_active && campaign.processing_status && (
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-blue-800">
-                            📊 {campaign.processing_status.current}/{campaign.processing_status.total} 
-                            ({campaign.processing_status.total > 0 ? Math.round((campaign.processing_status.current / campaign.processing_status.total) * 100) : 0}%)
+                  {activeTab === 'active' && (
+                    <CardContent className="space-y-4">
+                      {/* Status de processamento ativo */}
+                      {campaign.is_active && campaign.processing_status && (
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm font-medium text-blue-800">
+                              📊 {campaign.processing_status.current}/{campaign.processing_status.total} 
+                              ({campaign.processing_status.total > 0 ? Math.round((campaign.processing_status.current / campaign.processing_status.total) * 100) : 0}%)
+                            </span>
+                            <Badge variant="outline" className="text-blue-700">
+                              {campaign.processing_status.status}
+                            </Badge>
+                          </div>
+                          <div className="flex gap-4 text-xs text-blue-700">
+                            <span>✅ {campaign.processing_status.success} Sucessos</span>
+                            <span>❌ {campaign.processing_status.failed} Falhas</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Horário de funcionamento */}
+                      {campaign.start_time && campaign.end_time && (
+                        <div className="text-xs text-muted-foreground">
+                          🕐 Funcionamento: {campaign.start_time} - {campaign.end_time}
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Progresso</span>
+                          <span className="font-medium">
+                            {campaign.processing_status ? campaign.processing_status.current : campaign.sent} / {campaign.totalContacts}
                           </span>
-                          <Badge variant="outline" className="text-blue-700">
-                            {campaign.processing_status.status}
-                          </Badge>
                         </div>
-                        <div className="flex gap-4 text-xs text-blue-700">
-                          <span>✅ {campaign.processing_status.success} Sucessos</span>
-                          <span>❌ {campaign.processing_status.failed} Falhas</span>
-                        </div>
+                        <Progress 
+                          value={
+                            campaign.processing_status && campaign.processing_status.total > 0 
+                              ? Math.min((campaign.processing_status.current / campaign.processing_status.total) * 100, 100)
+                              : (campaign.totalContacts > 0 ? Math.min((campaign.sent / campaign.totalContacts) * 100, 100) : 0)
+                          } 
+                          className="h-2" 
+                        />
                       </div>
-                    )}
-
-                    {/* Horário de funcionamento */}
-                    {campaign.start_time && campaign.end_time && (
-                      <div className="text-xs text-muted-foreground">
-                        🕐 Funcionamento: {campaign.start_time} - {campaign.end_time}
-                      </div>
-                    )}
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between text-sm">
-                        <span>Progresso</span>
-                        <span className="font-medium">
-                          {campaign.processing_status ? campaign.processing_status.current : campaign.sent} / {campaign.totalContacts}
-                        </span>
-                      </div>
-                      <Progress 
-                        value={
-                          campaign.processing_status && campaign.processing_status.total > 0 
-                            ? Math.min((campaign.processing_status.current / campaign.processing_status.total) * 100, 100)
-                            : (campaign.totalContacts > 0 ? Math.min((campaign.sent / campaign.totalContacts) * 100, 100) : 0)
-                        } 
-                        className="h-2" 
-                      />
-                    </div>
-                  </CardContent>
+                    </CardContent>
+                  )}
                 </Card>
               )
             })}

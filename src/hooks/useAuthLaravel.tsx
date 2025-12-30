@@ -9,6 +9,10 @@ interface User {
   id: string
   email: string
   name: string
+  last_name?: string
+  cpf?: string
+  date_of_birth?: string
+  whatsapp?: string
   company?: string
   phone?: string
   role: 'user' | 'admin'
@@ -167,6 +171,10 @@ const mapServerUserToLocalUser = (serverUser: any): User => {
     id: serverUser.id,
     email: serverUser.email,
     name: serverUser.name,
+    last_name: serverUser.last_name,
+    cpf: serverUser.cpf,
+    date_of_birth: serverUser.date_of_birth,
+    whatsapp: serverUser.whatsapp,
     company: serverUser.company || '',
     phone: serverUser.phone,
     role: serverUser.role === 'admin' ? 'admin' : 'user',
@@ -472,7 +480,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const signUp = async (email: string, password: string, name: string, company?: string) => {
+  const signUp = async (
+    email: string, 
+    password: string, 
+    name: string, 
+    company: string = '',
+    profileData?: {
+      last_name: string
+      cpf: string
+      date_of_birth: string
+      whatsapp: string
+    }
+  ) => {
     try {
       setLoginState({ loading: true, error: null, status: 'Criando conta...' })
       
@@ -488,7 +507,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           password: password,
           password_confirmation: password,
           name: name.trim(),
-          company: company?.trim() || ''
+          company: company?.trim() || '',
+          last_name: profileData?.last_name?.trim() || '',
+          cpf: profileData?.cpf?.trim() || '',
+          date_of_birth: profileData?.date_of_birth || '',
+          whatsapp: profileData?.whatsapp?.trim() || ''
         })
       }, { timeout: FETCH_TIMEOUTS.AUTH_SIGNUP })
 

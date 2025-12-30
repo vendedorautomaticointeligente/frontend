@@ -87,7 +87,76 @@ export function Integrations() {
     if (!accessToken) return
     loadIntegrations()
     loadWhatsAppConnections()
+    
+    // 🔥 PASSO 2: POLLING PERIÓDICO DE STATUS DE CONEXÃO
+    // Detectar desconexões que podem não chegar via webhook
+    const pollingInterval = setInterval(() => {
+      console.log('🔄 [POLLING] Verificando status de conexões...')
+      loadWhatsAppConnections()
+    }, 30000) // A cada 30 segundos
+    
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        console.log('🛑 [POLLING] Intervalo de polling cancelado')
+      }
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessToken])
+
+  // 🔥 PASSO 3: LISTENER SSE PARA DESCONEXÕES EM TEMPO REAL
+  useEffect(() => {
+    if (!accessToken) return
+
+    const token = accessToken
+    const baseUrl = getApiUrl()
+    const sseUrl = `${baseUrl}/sse/stream?token=${encodeURIComponent(token)}`
+
+    console.log('📡 SSE: Estabelecendo listener para notificações de desconexão...')
+
+    try {
+      const eventSource = new EventSource(sseUrl)
+
+      eventSource.addEventListener('connection_disconnected', (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          console.log('🔴 SSE: DESCONEXÃO DETECTADA!', {
+            connectionId: data.connection_id,
+            instanceName: data.instance_name,
+            phone: data.phone,
+            disconnectedAt: data.disconnected_at
+          })
+
+          // Mostrar toast de aviso
+          toast.error(`🔴 WhatsApp ${data.phone || data.instance_name} foi desconectado!`, {
+            description: 'Clique para reconectar',
+            duration: 10000,
+            action: {
+              label: 'Reconectar',
+              onClick: () => {
+                loadWhatsAppConnections()
+              }
+            }
+          })
+
+          // Recarregar conexões para atualizar UI
+          loadWhatsAppConnections()
+
+          console.log('✅ SSE: Notificação de desconexão processada')
+        } catch (error) {
+          console.error('❌ SSE: Erro ao processar connection_disconnected', error)
+        }
+      })
+
+      return () => {
+        if (eventSource) {
+          eventSource.close()
+          console.log('🛑 SSE: Listener de desconexão fechado')
+        }
+      }
+    } catch (error) {
+      console.error('❌ SSE: Erro ao criar listener', error)
+    }
   }, [accessToken])
 
   const loadWhatsAppConnections = async () => {
@@ -396,22 +465,42 @@ export function Integrations() {
               <div className="space-y-3">
                 <p className="text-sm font-semibold text-slate-700">Números Conectados</p>
                 {whatsappConnections.map((connection: any, index: number) => (
-                  <div key={connection.id || index} className="p-4 bg-gradient-to-r from-green-50 to-green-100 border-2 border-green-300 rounded-lg flex items-center justify-between hover:shadow-md transition-shadow">
+                  <div key={connection.id || index} className={`p-4 border-2 rounded-lg flex items-center justify-between hover:shadow-md transition-shadow ${
+                    connection.connectionStatus === 'open' 
+                      ? 'bg-gradient-to-r from-green-50 to-green-100 border-green-300'
+                      : 'bg-gradient-to-r from-red-50 to-red-100 border-red-300'
+                  }`}>
                     <div className="flex items-center gap-4 flex-1">
                       {connection.profilePicUrl ? (
                         <img 
                           src={connection.profilePicUrl} 
                           alt={connection.connectionName}
-                          className="w-12 h-12 rounded-full object-cover border-2 border-green-300"
+                          className={`w-12 h-12 rounded-full object-cover border-2 ${
+                            connection.connectionStatus === 'open' 
+                              ? 'border-green-300' 
+                              : 'border-red-300 opacity-60'
+                          }`}
                         />
                       ) : (
-                        <div className="w-12 h-12 bg-green-200 rounded-full flex items-center justify-center border-2 border-green-300">
-                          <Smartphone className="w-6 h-6 text-green-700" />
+                        <div className={`w-12 h-12 rounded-full flex items-center justify-center border-2 ${
+                          connection.connectionStatus === 'open' 
+                            ? 'bg-green-200 border-green-300'
+                            : 'bg-red-200 border-red-300 opacity-60'
+                        }`}>
+                          <Smartphone className={`w-6 h-6 ${
+                            connection.connectionStatus === 'open' 
+                              ? 'text-green-700' 
+                              : 'text-red-700'
+                          }`} />
                         </div>
                       )}
                       <div className="flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="font-bold text-lg text-green-900">
+                          <p className={`font-bold text-lg ${
+                            connection.connectionStatus === 'open' 
+                              ? 'text-green-900' 
+                              : 'text-red-900'
+                          }`}>
                             {connection.connectionName || 'Sem nome'}
                           </p>
                           {connection.connectionStatus === 'open' && (
@@ -420,14 +509,33 @@ export function Integrations() {
                               Ativo
                             </Badge>
                           )}
+                          {connection.connectionStatus === 'disconnected' && (
+                            <Badge className="bg-red-500 text-white text-xs">
+                              <X className="w-2.5 h-2.5 mr-1" />
+                              Desconectado
+                            </Badge>
+                          )}
                         </div>
                         <div className="mt-1 space-y-0.5">
-                          <p className="text-sm text-green-700 font-mono font-semibold">
+                          <p className={`text-sm font-mono font-semibold ${
+                            connection.connectionStatus === 'open' 
+                              ? 'text-green-700' 
+                              : 'text-red-700'
+                          }`}>
                             📱 {connection.phoneNumber ? `+${connection.phoneNumber}` : 'Número não disponível'}
                           </p>
                           {connection.instanceName && (
-                            <p className="text-xs text-green-600">
+                            <p className={`text-xs ${
+                              connection.connectionStatus === 'open' 
+                                ? 'text-green-600' 
+                                : 'text-red-600'
+                            }`}>
                               ID: {connection.instanceName}
+                            </p>
+                          )}
+                          {connection.connectionStatus === 'disconnected' && (
+                            <p className="text-xs text-red-600 font-semibold">
+                              ⚠️ A conexão foi perdida. Clique em "Reconectar" para escanear um novo QR code.
                             </p>
                           )}
                         </div>
@@ -439,6 +547,34 @@ export function Integrations() {
                           <Check className="w-3 h-3 mr-1" />
                           Ativo
                         </Badge>
+                      )}
+                      {connection.connectionStatus === 'disconnected' && (
+                        <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
+                          <AlertCircle className="w-3 h-3 mr-1" />
+                          Inativo
+                        </Badge>
+                      )}
+                      {connection.connectionStatus === 'disconnected' && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-blue-300 text-blue-600 hover:bg-blue-50"
+                          onClick={() => {
+                            // Trigger para obter novo QR code usando a mesma instância
+                            setSelectedConnectionId(connection.id)
+                            setSessionId(connection.instanceName)
+                            setQrLoading(true)
+                            setShowWhatsAppDialog(true)
+                            
+                            // Começar polling de status para esta conexão específica
+                            pollQrCode(connection.id)
+                            
+                            toast.success('Escaneie o QR code com seu WhatsApp para reconectar')
+                          }}
+                        >
+                          <QrCode className="w-3 h-3 mr-1" />
+                          Reconectar
+                        </Button>
                       )}
                       <Button
                         variant="ghost"

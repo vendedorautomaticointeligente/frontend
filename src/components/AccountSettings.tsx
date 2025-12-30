@@ -34,14 +34,43 @@ function AccountSettingsContent() {
   const { user, isAdmin, accessToken, updateUser } = useAuth()
   const baseUrl = getApiUrl()
   
+  console.log('🔍 [AccountSettings] Auth state:', {
+    user: user?.email,
+    accessToken: accessToken ? '✅ presente' : '❌ faltando',
+    baseUrl
+  })
+  
   // Modo edição
   const [isEditingProfile, setIsEditingProfile] = useState(false)
   
+  // Plan and subscription data
+  const [planData, setPlanData] = useState<{
+    current_plan: string
+    name: string
+    description: string
+    status: string
+    started_at: string
+    ends_at: string
+    limits: {
+      max_contacts_per_month: number
+      max_connected_numbers: number
+      max_ai_agents: number
+      max_automations: number
+      max_campaigns_per_month: number
+      max_concurrent_calls: number
+    }
+  } | null>(null)
+  const [isLoadingPlan, setIsLoadingPlan] = useState(true)
+  
   // User info
   const [name, setName] = useState(user?.name || "")
+  const [lastName, setLastName] = useState(user?.last_name || "")
   const [email, setEmail] = useState(user?.email || "")
   const [phone, setPhone] = useState(user?.phone || "")
   const [company, setCompany] = useState(user?.company || "")
+  const [cpf, setCpf] = useState(user?.cpf || "")
+  const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth || "")
+  const [whatsapp, setWhatsapp] = useState(user?.whatsapp || "")
   
   // Address fields (granular)
   const [addressStreet, setAddressStreet] = useState(user?.address_street || "")
@@ -74,6 +103,45 @@ function AccountSettingsContent() {
   const [isLoadingNotifications, setIsLoadingNotifications] = useState(false)
 
   // 🔐 Função para calcular força da senha em tempo real
+  // Converter data de YYYY-MM-DD para formato exibição DD/MM/YYYY
+  const formatDateDisplay = (date?: string) => {
+    if (!date) return ''
+    // Se está em formato YYYY-MM-DD, converter para DD/MM/YYYY
+    if (date.includes('-') && !date.includes('/')) {
+      const parts = date.split('-')
+      return `${parts[2]}/${parts[1]}/${parts[0]}`
+    }
+    // Se já está em DD/MM/YYYY, retorna como está
+    return date
+  }
+
+  // Converter data de YYYY-MM-DD para input type="date" (requer YYYY-MM-DD)
+  const formatDateToInput = (date?: string) => {
+    if (!date) return ''
+    // Se já está em formato YYYY-MM-DD, retorna como está
+    if (date.includes('-') && !date.includes('/')) {
+      return date
+    }
+    // Se está em DD/MM/YYYY, converte para YYYY-MM-DD
+    if (date.includes('/')) {
+      const parts = date.split('/')
+      return `${parts[2]}-${parts[1]}-${parts[0]}`
+    }
+    return date
+  }
+
+  // Converter data de DD/MM/YYYY para YYYY-MM-DD para enviar ao backend
+  const formatDateForBackend = (date: string) => {
+    if (!date) return ''
+    // Se está em DD/MM/YYYY (input manual), converter para YYYY-MM-DD
+    if (date.includes('/')) {
+      const parts = date.split('/')
+      return `${parts[2]}-${parts[1]}-${parts[0]}`
+    }
+    // Se já está em YYYY-MM-DD, retorna como está
+    return date
+  }
+
   const getPasswordStrength = (password: string) => {
     if (!password) return { score: 0, label: '', color: '' }
     
@@ -198,6 +266,10 @@ function AccountSettingsContent() {
     if (user) {
       console.log("📋 [AccountSettings] Carregando dados do contexto:", {
         name: user.name,
+        last_name: user.last_name,
+        cpf: user.cpf,
+        date_of_birth: user.date_of_birth,
+        whatsapp: user.whatsapp,
         phone: user.phone,
         company: user.company,
         address_street: user.address_street,
@@ -208,9 +280,13 @@ function AccountSettingsContent() {
       })
       
       setName(user.name || "")
+      setLastName(user.last_name || "")
       setEmail(user.email || "")
       setPhone(user.phone || "")
       setCompany(user.company || "")
+      setCpf(user.cpf || "")
+      setDateOfBirth(formatDateToInput(user.date_of_birth))
+      setWhatsapp(user.whatsapp || "")
       setAddressStreet(user.address_street || "")
       setAddressNumber(user.address_number || "")
       setAddressComplement(user.address_complement || "")
@@ -223,6 +299,56 @@ function AccountSettingsContent() {
       setWeeklyReport(user.weekly_report ?? true)
     }
   }, [user])
+
+  // Carregar dados de plano e subscription
+  useEffect(() => {
+    const fetchPlanData = async () => {
+      if (!user || !accessToken) {
+        setIsLoadingPlan(false)
+        return
+      }
+
+      try {
+        setIsLoadingPlan(true)
+        console.log('📡 Carregando dados do plano com token:', accessToken ? '✅ presente' : '❌ faltando')
+        
+        // baseUrl já vem com /api, não adicionar novamente
+        const url = baseUrl.endsWith('/api') 
+          ? `${baseUrl}/auth/me`
+          : `${baseUrl}/api/auth/me`
+        
+        console.log('🔗 URL:', url)
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        console.log('📊 Resposta do /api/auth/me:', response.status)
+
+        if (response.ok) {
+          const data = await response.json()
+          console.log('✅ Dados recebidos:', data.plan)
+          if (data.plan) {
+            setPlanData(data.plan)
+          }
+        } else {
+          console.warn('⚠️ Erro ao carregar dados do plano:', response.status, response.statusText)
+          const errorText = await response.text()
+          console.warn('Resposta:', errorText)
+        }
+      } catch (error) {
+        console.error('❌ Erro ao carregar plano:', error)
+      } finally {
+        setIsLoadingPlan(false)
+      }
+    }
+
+    fetchPlanData()
+  }, [user, accessToken, baseUrl])
 
   const handleSaveProfile = async () => {
     if (!name.trim()) {
@@ -243,6 +369,12 @@ function AccountSettingsContent() {
       if (name.trim()) {
         payload.name = name.trim()
       }
+      
+      // Novos campos de perfil
+      if (lastName.trim()) payload.last_name = lastName.trim()
+      if (cpf.trim()) payload.cpf = cpf.trim()
+      if (dateOfBirth.trim()) payload.date_of_birth = formatDateForBackend(dateOfBirth.trim())
+      if (whatsapp.trim()) payload.whatsapp = whatsapp.trim()
       
       // Incluir outros campos APENAS se tiverem valores (evitar null/undefined)
       if (company.trim()) payload.company = company.trim()
@@ -329,9 +461,13 @@ function AccountSettingsContent() {
             
             // Atualizar states com dados do servidor (fonte da verdade)
             setName(updatedUser.name || "")
+            setLastName(updatedUser.last_name || "")
             setEmail(updatedUser.email || "")
             setPhone(updatedUser.phone || "")
             setCompany(updatedUser.company || "")
+            setCpf(updatedUser.cpf || "")
+            setDateOfBirth(formatDateToInput(updatedUser.date_of_birth))
+            setWhatsapp(updatedUser.whatsapp || "")
             setAddressStreet(updatedUser.address_street || "")
             setAddressNumber(updatedUser.address_number || "")
             setAddressComplement(updatedUser.address_complement || "")
@@ -344,9 +480,13 @@ function AccountSettingsContent() {
             // Isso garante que dados persistem mesmo após hard refresh
             updateUser({
               name: updatedUser.name,
+              last_name: updatedUser.last_name,
               email: updatedUser.email,
               phone: updatedUser.phone,
               company: updatedUser.company,
+              cpf: updatedUser.cpf,
+              date_of_birth: updatedUser.date_of_birth,
+              whatsapp: updatedUser.whatsapp,
               address_street: updatedUser.address_street,
               address_number: updatedUser.address_number,
               address_complement: updatedUser.address_complement,
@@ -586,29 +726,31 @@ function AccountSettingsContent() {
   }
 
   // Função auxiliar para renderizar campo em modo visualização
-  const renderViewField = (label: string, value: string, icon?: any) => (
+  const renderViewField = (label: string, value: string, icon?: any, formatter?: (v: string) => string) => (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="flex items-center gap-2">
         {icon && <span className="w-4 h-4 text-muted-foreground">{icon}</span>}
-        <p className="text-sm font-medium">{value || "-"}</p>
+        <p className="text-sm font-medium">{formatter ? formatter(value) : value || "-"}</p>
       </div>
     </div>
   )
 
   // Função auxiliar para renderizar input em modo edição
-  const renderEditField = (id: string, label: string, value: string, onChange: (val: string) => void, placeholder: string, icon?: any, disabled: boolean = false) => (
+  const renderEditField = (id: string, label: string, value: string, onChange: (val: string) => void, placeholder: string, icon?: any, disabled: boolean = false, type: string = "text") => (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       <div className="relative">
         {icon && <span className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground">{icon}</span>}
         <Input
           id={id}
+          type={type}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
           className={icon ? "pl-10" : ""}
+          max={type === "date" ? new Date().toISOString().split('T')[0] : undefined}
         />
       </div>
     </div>
@@ -665,12 +807,22 @@ function AccountSettingsContent() {
             {!isEditingProfile ? (
               <>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {renderViewField("Nome Completo", name)}
-                  {renderViewField("Email", email)}
+                  {renderViewField("Nome", name)}
+                  {renderViewField("Sobrenome", lastName)}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
+                  {renderViewField("Email", email)}
                   {renderViewField("Telefone", phone, <Phone className="w-4 h-4" />)}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {renderViewField("CPF", cpf)}
+                  {renderViewField("Data de Nascimento", dateOfBirth, undefined, formatDateDisplay)}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {renderViewField("WhatsApp", whatsapp)}
                   {renderViewField("Empresa", company, <Building2 className="w-4 h-4" />)}
                 </div>
 
@@ -709,12 +861,22 @@ function AccountSettingsContent() {
               /* MODO EDIÇÃO */
               <>
                 <div className="grid gap-4 md:grid-cols-2">
-                  {renderEditField("name", "Nome Completo", name, setName, "Seu nome completo")}
-                  {renderEditField("email", "Email", email, setEmail, "seu@email.com", undefined, true)}
+                  {renderEditField("name", "Nome", name, setName, "Seu nome")}
+                  {renderEditField("last_name", "Sobrenome", lastName, setLastName, "Seu sobrenome")}
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
+                  {renderEditField("email", "Email", email, setEmail, "seu@email.com", undefined, true)}
                   {renderEditField("phone", "Telefone", phone, setPhone, "+55 11 99999-9999", <Phone className="w-4 h-4" />)}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {renderEditField("cpf", "CPF", cpf, setCpf, "XXX.XXX.XXX-XX")}
+                  {renderEditField("date_of_birth", "Data de Nascimento (DD/MM/YYYY)", dateOfBirth, setDateOfBirth, "DD/MM/YYYY", undefined, false, "date")}
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  {renderEditField("whatsapp", "WhatsApp", whatsapp, setWhatsapp, "(XX) XXXXX-XXXX")}
                   {renderEditField("company", "Empresa", company, setCompany, "Nome da empresa", <Building2 className="w-4 h-4" />)}
                 </div>
 
@@ -1062,39 +1224,95 @@ function AccountSettingsContent() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg border" style={{ background: 'linear-gradient(to right, #E8F1FD, #E3F2EC)', borderColor: '#1F5FBF40' }}>
-              <div>
-                <p className="font-semibold text-lg">Plano Professional</p>
-                <p className="text-sm text-muted-foreground">
-                  Acesso ilimitado a todas as funcionalidades
-                </p>
+            {isLoadingPlan ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                <span>Carregando informações do plano...</span>
               </div>
-              <Badge className="bg-blue-600">Ativo</Badge>
-            </div>
+            ) : planData ? (
+              <>
+                <div className="flex items-center justify-between p-4 rounded-lg border" style={{ background: 'linear-gradient(to right, #E8F1FD, #E3F2EC)', borderColor: '#1F5FBF40' }}>
+                  <div>
+                    <p className="font-semibold text-lg">{planData.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {planData.description}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Badge className={planData.status === 'active' ? 'bg-green-600' : 'bg-yellow-600'}>
+                      {planData.status === 'active' ? '✓ Ativo' : planData.status.toUpperCase()}
+                    </Badge>
+                    {planData.name.toUpperCase() !== 'CUSTOM' && (
+                      <Button 
+                        onClick={() => window.location.hash = '#/plans'}
+                        className="gap-2 bg-blue-600 hover:bg-blue-700"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Fazer Upgrade
+                      </Button>
+                    )}
+                  </div>
+                </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Listas Criadas</p>
-                <p className="text-2xl font-semibold">Ilimitadas</p>
-              </div>
-              
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Agentes Ativos</p>
-                <p className="text-2xl font-semibold">Ilimitados</p>
-              </div>
-              
-              <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="text-sm text-muted-foreground mb-1">Campanhas/Mês</p>
-                <p className="text-2xl font-semibold">Ilimitadas</p>
-              </div>
-            </div>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Contatos/Mês</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_contacts_per_month === 2147483647 ? '∞' : planData.limits.max_contacts_per_month}
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Números Conectados</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_connected_numbers === 2147483647 ? '∞' : planData.limits.max_connected_numbers}
+                    </p>
+                  </div>
+                  
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Agentes IA</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_ai_agents === 2147483647 ? '∞' : planData.limits.max_ai_agents}
+                    </p>
+                  </div>
 
-            <Alert>
-              <CheckCircle className="h-4 w-4" />
-              <AlertDescription>
-                Seu plano renova automaticamente todo dia 15 do mês.
-              </AlertDescription>
-            </Alert>
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Automações</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_automations === 2147483647 ? '∞' : planData.limits.max_automations}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Campanhas/Mês</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_campaigns_per_month === 2147483647 ? '∞' : planData.limits.max_campaigns_per_month}
+                    </p>
+                  </div>
+
+                  <div className="p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-1">Atend. Simultâneos</p>
+                    <p className="text-2xl font-semibold">
+                      {planData.limits.max_concurrent_calls === 2147483647 ? '∞' : planData.limits.max_concurrent_calls}
+                    </p>
+                  </div>
+                </div>
+
+                <Alert>
+                  <CheckCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Plano válido até {new Date(planData.ends_at).toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' })}.
+                  </AlertDescription>
+                </Alert>
+              </>
+            ) : (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Não foi possível carregar as informações do plano. Tente recarregar a página.
+                </AlertDescription>
+              </Alert>
+            )}
           </CardContent>
         </Card>
 

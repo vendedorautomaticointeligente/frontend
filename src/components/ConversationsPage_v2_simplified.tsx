@@ -5,6 +5,7 @@ import { Button } from "./ui/button"
 import { Avatar, AvatarFallback } from "./ui/avatar"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle, AlertDialogFooter } from "./ui/alert-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select"
 import { useAuth } from "../hooks/useAuthLaravel"
 import { toast } from "sonner"
 import { safeFetch, FETCH_DEFAULT_TIMEOUT } from "../utils/fetchWithTimeout"
@@ -22,6 +23,19 @@ type Message = {
   timestamp: string
   isSent: boolean
   status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed'
+  message_type?: 'text' | 'audio' | 'image' | 'video' | 'document'
+  media_data?: {
+    url?: string
+    caption?: string
+    filename?: string
+    transcription?: string
+    analysis?: string
+    duration?: number
+    mimetype?: string
+    ptt?: boolean
+    animated?: boolean
+    analyzed_at?: string
+  }
 }
 
 type Conversation = {
@@ -67,6 +81,14 @@ export function ConversationsPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
+
+  // STATE - Filtro por instância (NOVO)
+  const [selectedInstance, setSelectedInstance] = useState<string>('all') // 'all' = todas as instâncias
+  const [availableInstances, setAvailableInstances] = useState<string[]>([])
+  
+  // STATE - WhatsApp Connections (para nomes das instâncias)
+  const [whatsappConnections, setWhatsappConnections] = useState<any[]>([])
+  const [loadingConnections, setLoadingConnections] = useState(false)
 
   // STATE - CRM Panel
   const [isCrmPanelOpen, setIsCrmPanelOpen] = useState(false)
@@ -166,6 +188,56 @@ export function ConversationsPage() {
       if (!silent) setLoading(false)
     }
   }, [accessToken, baseUrl, selectedConversation])
+
+  // ============================================================================
+  // FUNÇÃO 1.5: Carregar Conexões WhatsApp (para nomes das instâncias)
+  // ============================================================================
+
+  const loadWhatsAppConnections = useCallback(async () => {
+    if (!accessToken) return
+
+    try {
+      setLoadingConnections(true)
+
+      const response = await safeFetch(
+        `${baseUrl}/whatsapp/connections`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } },
+        { timeout: FETCH_DEFAULT_TIMEOUT }
+      )
+
+      if (!response?.ok) {
+        console.warn('Erro ao carregar conexões WhatsApp')
+        return
+      }
+
+      const data = await response.json()
+      console.log('✅ Conexões WhatsApp carregadas:', data)
+
+      if (data.connections && Array.isArray(data.connections)) {
+        console.log('🔍 Todas as conexões (completo):', JSON.stringify(data.connections, null, 2))
+        console.log('🔍 Cada conexão detalhada:')
+        data.connections.forEach((conn: any, idx: number) => {
+          console.log(`  Conexão ${idx}:`, {
+            instanceName: conn.instanceName,
+            connectionStatus: conn.connectionStatus,
+            connectionName: conn.connectionName,
+            phoneNumber: conn.phoneNumber
+          })
+        })
+        
+        // Filtrar apenas conexões ativas (open)
+        const activeConnections = data.connections.filter(
+          (conn: any) => conn.connectionStatus === 'open'
+        )
+        console.log('🔥 Conexões ativas (após filtro):', activeConnections)
+        setWhatsappConnections(activeConnections)
+      }
+    } catch (error) {
+      console.error('Erro ao carregar conexões WhatsApp:', error)
+    } finally {
+      setLoadingConnections(false)
+    }
+  }, [accessToken, baseUrl])
 
   // ============================================================================
   // FUNÇÃO 2: Carregar Mensagens da Conversa
@@ -468,8 +540,20 @@ export function ConversationsPage() {
   useEffect(() => {
     if (accessToken) {
       loadConversations()
+      loadWhatsAppConnections()
     }
-  }, [accessToken]) // Só executa uma vez
+  }, [accessToken]) // Só executa quando accessToken muda
+
+  // ============================================================================
+  // EFEITO 2: Carregar mensagens quando conversa é selecionada
+  // ============================================================================
+
+  useEffect(() => {
+    if (selectedConversation && accessToken) {
+      console.log('📨 [useEffect] Conversa selecionada, carregando mensagens:', selectedConversation.id)
+      loadMessages()
+    }
+  }, [selectedConversation?.id, accessToken, loadMessages]) // Executa quando conversa muda
 
   // ============================================================================
   // EFEITO 3: Auto-scroll para última mensagem
@@ -553,6 +637,9 @@ export function ConversationsPage() {
           sseAttempts = 0
           lastHeartbeat = Date.now()
           startHeartbeatMonitor()
+          // 🔥 Disparar evento para notificar que SSE está conectado
+          window.dispatchEvent(new CustomEvent('sse-connected'))
+          console.log('🌐 [SSE] Conectado com sucesso')
         })
 
         eventSource.addEventListener('heartbeat', (event) => {
@@ -564,17 +651,29 @@ export function ConversationsPage() {
 
         eventSource.addEventListener('message_received', (event) => {
           const data = JSON.parse(event.data)
-          if (selectedConversation?.id === data.conversation_id?.toString()) {
+          
+          // 🔥 HELPER: Normalizar conversation_id para string para comparação consistente
+          const normalizeId = (id: any) => String(id)
+          const messageConvId = normalizeId(data.conversation_id)
+          const selectedConvId = normalizeId(selectedConversation?.id)
+          
+          if (messageConvId === selectedConvId) {
             setMessages(prev => {
-              const exists = prev.find(m => m.id === data.id)
-              if (exists) return prev
+              const messageId = normalizeId(data.message_id || data.id)
+              const exists = prev.find(m => normalizeId(m.id) === messageId)
+              if (exists) {
+                console.log('⚠️ SSE v2: Mensagem duplicada detectada, ignorando', { messageId })
+                return prev
+              }
 
               const newMessage: Message = {
-                id: data.id,
+                id: messageId,
                 text: data.text,
-                timestamp: data.created_at,
-                isSent: false,
-                status: 'sent'
+                timestamp: data.created_at || new Date().toISOString(),
+                isSent: data.direction === 'sent' || false,
+                status: data.direction === 'sent' ? 'sent' : 'read',
+                message_type: data.message_type,
+                media_data: data.media_data
               }
               return [...prev, newMessage]
             })
@@ -585,9 +684,14 @@ export function ConversationsPage() {
 
         eventSource.addEventListener('message_accepted', (event) => {
           const data = JSON.parse(event.data)
-          if (selectedConversation?.id === data.conversation_id?.toString()) {
+          const normalizeId = (id: any) => String(id)
+          const messageConvId = normalizeId(data.conversation_id)
+          const selectedConvId = normalizeId(selectedConversation?.id)
+          
+          if (messageConvId === selectedConvId) {
+            const messageId = normalizeId(data.message_id)
             setMessages(prev => prev.map(m =>
-              m.id === data.message_id?.toString()
+              normalizeId(m.id) === messageId
                 ? { ...m, status: 'sending' as const }
                 : m
             ))
@@ -596,9 +700,14 @@ export function ConversationsPage() {
 
         eventSource.addEventListener('message_status_update', (event) => {
           const data = JSON.parse(event.data)
-          if (selectedConversation?.id === data.conversation_id?.toString()) {
+          const normalizeId = (id: any) => String(id)
+          const messageConvId = normalizeId(data.conversation_id)
+          const selectedConvId = normalizeId(selectedConversation?.id)
+          
+          if (messageConvId === selectedConvId) {
+            const messageId = normalizeId(data.message_id)
             setMessages(prev => prev.map(m =>
-              m.id === data.message_id?.toString()
+              normalizeId(m.id) === messageId
                 ? { ...m, status: data.status }
                 : m
             ))
@@ -625,6 +734,105 @@ export function ConversationsPage() {
         eventSourceRef.current.close()
       }
       if (sseTimeout) clearTimeout(sseTimeout)
+    }
+  }, [accessToken, baseUrl, selectedConversation?.id])
+
+  // ============================================================================
+  // EFEITO 5: Sistema FALLBACK POLLING - Funciona quando SSE falha
+  // ============================================================================
+  // Se SSE cair por mais de 2 minutos, ativar polling automático
+
+  useEffect(() => {
+    if (!accessToken || !selectedConversation?.id) return
+
+    let pollingInterval: NodeJS.Timeout | null = null
+    let lastMessageCount = 0
+
+    const startPolling = () => {
+      console.log('🔄 [FALLBACK] Iniciando polling para mensagens (SSE indisponível)')
+      
+      pollingInterval = setInterval(async () => {
+        try {
+          const response = await fetch(
+            `${baseUrl}/conversations/${selectedConversation.id}/messages?limit=50`,
+            {
+              headers: { Authorization: `Bearer ${accessToken}` }
+            }
+          )
+
+          if (!response.ok) return
+
+          const data = await response.json()
+          const incomingMessages = data.data || data || []
+
+          // 🔥 Comparar com mensagens atuais para detectar novas
+          if (incomingMessages.length > lastMessageCount) {
+            console.log('✅ [FALLBACK] Novas mensagens detectadas via polling', {
+              old_count: lastMessageCount,
+              new_count: incomingMessages.length
+            })
+
+            setMessages(prev => {
+              const normalizeId = (id: any) => String(id)
+              const existingIds = new Set(prev.map(m => normalizeId(m.id)))
+
+              const newMessages = incomingMessages
+                .filter((m: any) => !existingIds.has(normalizeId(m.id)))
+                .map((msg: any) => ({
+                  id: normalizeId(msg.id),
+                  text: msg.text,
+                  timestamp: msg.created_at || new Date().toISOString(),
+                  isSent: msg.direction === 'sent',
+                  status: msg.status || (msg.direction === 'sent' ? 'sent' : 'read'),
+                  message_type: msg.message_type,
+                  media_data: msg.media_data
+                }))
+
+              if (newMessages.length > 0) {
+                return [...prev, ...newMessages]
+              }
+              return prev
+            })
+          }
+
+          lastMessageCount = incomingMessages.length
+        } catch (error) {
+          console.error('❌ [FALLBACK] Erro em polling:', error)
+        }
+      }, 3000) // Polling a cada 3 segundos
+    }
+
+    // 🔥 Detectar quando SSE está offline e iniciar polling
+    // Usar um contador para dar 2 minutos de chance ao SSE reconectar
+    let sseOfflineSeconds = 0
+    const sseOfflineChecker = setInterval(() => {
+      sseOfflineSeconds++
+      
+      // Se SSE offline por mais de 2 minutos, ativar polling
+      if (sseOfflineSeconds > 120) {
+        if (!pollingInterval) {
+          startPolling()
+        }
+      }
+    }, 1000)
+
+    // 🔥 Resetar contador se SSE voltar
+    const resetSSECounter = () => {
+      sseOfflineSeconds = 0
+      if (pollingInterval) {
+        clearInterval(pollingInterval)
+        pollingInterval = null
+        console.log('🔌 [FALLBACK] SSE restaurado, parando polling')
+      }
+    }
+
+    // Monitorar se SSE está funcionando
+    window.addEventListener('sse-connected', resetSSECounter)
+
+    return () => {
+      clearInterval(sseOfflineChecker)
+      if (pollingInterval) clearInterval(pollingInterval)
+      window.removeEventListener('sse-connected', resetSSECounter)
     }
   }, [accessToken, baseUrl, selectedConversation?.id])
 
@@ -1006,10 +1214,35 @@ export function ConversationsPage() {
   // RENDER: Lista de Conversas
   // ============================================================================
 
-  const filteredConversations = conversations.filter(c =>
-    c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.phone_number.includes(searchQuery)
-  )
+  // 🔥 Atualizar instâncias disponíveis a partir das conexões WhatsApp ativas
+  useEffect(() => {
+    console.log('📊 whatsappConnections mudou:', whatsappConnections)
+    
+    // Usar conexões WhatsApp ao invés de extrair das conversas
+    const instances = whatsappConnections
+      .filter(conn => conn.instanceName) // Garantir que tem instanceName
+      .map(conn => conn.instanceName)
+    
+    console.log('📱 Instâncias extraídas:', instances)
+    setAvailableInstances(instances)
+    
+    // Se a instância selecionada foi deletada, voltar para "all"
+    if (selectedInstance !== 'all' && !instances.includes(selectedInstance)) {
+      console.log('⚠️ Instância selecionada não existe mais, voltando para "all"')
+      setSelectedInstance('all')
+    }
+  }, [whatsappConnections])
+
+  const filteredConversations = conversations.filter(c => {
+    // Filtro de busca
+    const matchesSearch = c.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.phone_number.includes(searchQuery)
+
+    // Filtro de instância (NOVO) - 'all' = mostrar todas
+    const matchesInstance = selectedInstance === 'all' || c.whatsapp_instance_name === selectedInstance
+
+    return matchesSearch && matchesInstance
+  })
 
   if (!accessToken) {
     return (
@@ -1042,6 +1275,60 @@ export function ConversationsPage() {
       <div className="flex-1 flex overflow-hidden">
         {/* Conversations List - Coluna estreita */}
         <div className="w-64 bg-white/60 backdrop-blur-sm border-r border-gray-200/60 flex flex-col shadow-lg overflow-hidden flex-shrink-0">
+          {/* DEBUG: Log do estado */}
+          {console.log('🔍 DEBUG Dropdown:', { availableInstances, whatsappConnections, selectedInstance })}
+          
+          {/* Instance Dropdown Filter - NOVO */}
+          {/* 🔥 Mostrar filtro de instâncias quando há múltiplas conectadas */}
+          {availableInstances.length >= 1 && (
+            <div className="flex-shrink-0 border-b border-gray-200/60 bg-gradient-to-r from-white/90 to-blue-50/50 p-3">
+              <Select value={selectedInstance} onValueChange={setSelectedInstance}>
+                <SelectTrigger className="w-full bg-white border-gray-300 text-sm">
+                  <SelectValue 
+                    placeholder="Todas as instâncias"
+                  />
+                </SelectTrigger>
+                <SelectContent align="start" className="w-full">
+                  {/* Opção: Todas as instâncias */}
+                  <SelectItem value="all" className="cursor-pointer">
+                    <span className="flex items-center gap-2">
+                      <span>📱 Todas as instâncias</span>
+                      <span className="text-xs text-gray-500 ml-1">({conversations.length})</span>
+                    </span>
+                  </SelectItem>
+
+                  {/* Separador */}
+                  <div className="my-1 border-t border-gray-200" />
+
+                  {/* Opções: Uma por instância */}
+                  {availableInstances.map((instanceName) => {
+                    // Buscar a conexão correspondente para obter o nome configurado
+                    const connection = whatsappConnections.find(
+                      conn => conn.instanceName === instanceName
+                    )
+                    
+                    // Nome da conexão (configurado pelo usuário) ou fallback para instanceName
+                    const displayName = connection?.connectionName || instanceName
+                    
+                    // Contar conversas desta instância
+                    const instanceConvCount = conversations.filter(
+                      c => c.whatsapp_instance_name === instanceName
+                    ).length
+                    
+                    return (
+                      <SelectItem key={instanceName} value={instanceName} className="cursor-pointer">
+                        <span className="flex items-center gap-2">
+                          <span>📱 {displayName}</span>
+                          <span className="text-xs text-gray-500 ml-1">({instanceConvCount})</span>
+                        </span>
+                      </SelectItem>
+                    )
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Search */}
           <div className="p-4 border-b border-gray-200/60 space-y-3 bg-gradient-to-r from-white/90 to-blue-50/50 flex-shrink-0">
             <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-gray-200">
