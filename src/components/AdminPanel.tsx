@@ -62,12 +62,17 @@ export function AdminPanel() {
   const [success, setSuccess] = useState('')
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
+  const [editingPlanUserId, setEditingPlanUserId] = useState<string | null>(null)
+  const [editingPlanValue, setEditingPlanValue] = useState('')
+  const [updatingPlan, setUpdatingPlan] = useState(false)
   const [connection, setConnection] = useState<ConnectionState>({
     isOnline: false,
     lastError: null,
     lastSuccess: null,
     retryCount: 0
   })
+  
+  const validPlans = ['trial', 'start', 'basic', 'intermediate', 'advanced', 'custom']
   
   const [stats, setStats] = useState<AdminStats>({
     totalUsers: 1,
@@ -380,6 +385,31 @@ export function AdminPanel() {
       toast.error('Erro ao deletar usuários: ' + error.message)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const updateUserPlan = async (userId: string, newPlan: string) => {
+    try {
+      setUpdatingPlan(true)
+      
+      const response = await apiCall(`/admin/users/${userId}/plan`, {
+        method: 'POST',
+        body: JSON.stringify({ plan: newPlan })
+      })
+      
+      if (response.success) {
+        toast.success(`Plano atualizado para ${newPlan} com sucesso`)
+        setEditingPlanUserId(null)
+        setEditingPlanValue('')
+        await loadDashboardData()
+      } else {
+        toast.error(response.message || 'Erro ao atualizar plano')
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      toast.error(`Erro ao atualizar plano: ${errorMsg}`)
+    } finally {
+      setUpdatingPlan(false)
     }
   }
 
@@ -765,6 +795,19 @@ export function AdminPanel() {
                     </Badge>
                   )}
                   <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setEditingPlanUserId(user.id)
+                      setEditingPlanValue(user.plan)
+                    }}
+                    disabled={updatingPlan || deleting}
+                    className="gap-1"
+                  >
+                    <Settings className="w-4 h-4" />
+                    <span className="hidden sm:inline text-xs">Editar</span>
+                  </Button>
+                  <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => deleteUser(user.id)}
@@ -775,6 +818,46 @@ export function AdminPanel() {
                     <span className="hidden sm:inline text-xs">Deletar</span>
                   </Button>
                 </div>
+
+                {/* Modal de Edição de Plano */}
+                {editingPlanUserId === user.id && (
+                  <div className="w-full bg-blue-50 border-l-4 border-blue-500 p-4 rounded mt-2 space-y-3">
+                    <p className="text-sm font-medium text-blue-900">Alterar plano para {user.name}:</p>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <select
+                        value={editingPlanValue}
+                        onChange={(e) => setEditingPlanValue(e.target.value)}
+                        disabled={updatingPlan}
+                        className="flex-1 px-3 py-2 border rounded-md text-sm bg-white"
+                      >
+                        {validPlans.map(plan => (
+                          <option key={plan} value={plan}>
+                            {plan.charAt(0).toUpperCase() + plan.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        onClick={() => updateUserPlan(user.id, editingPlanValue)}
+                        disabled={updatingPlan || editingPlanValue === user.plan}
+                        className="gap-1"
+                      >
+                        {updatingPlan ? 'Salvando...' : 'Salvar'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setEditingPlanUserId(null)
+                          setEditingPlanValue('')
+                        }}
+                        disabled={updatingPlan}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
