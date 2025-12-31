@@ -14,7 +14,8 @@ RUN npm ci --prefer-offline --no-audit --legacy-peer-deps
 COPY . .
 
 # Build the application with environment variables
-RUN npm run build
+# NODE_ENV=production garante que Vite use .env.production
+RUN NODE_ENV=production npm run build
 
 # Production stage - Nginx
 FROM nginx:alpine
