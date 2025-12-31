@@ -15,9 +15,9 @@ export const getApiUrl = (): string => {
     return 'http://localhost:8000/api'
   }
 
-  // 3. Fallback para o host público (ngrok ou cloudflare tunnel)
+  // 3. Fallback para a API de produção
   // Este é o padrão quando rodando em produção
-  const fallbackHost = 'https://nontragical-milton-prebranchial.ngrok-free.dev'
+  const fallbackHost = 'https://api.vendedorautomaticointeligente.com'
   if (fallbackHost) {
     return `${fallbackHost.replace(/\/+$/, '')}/api`
   }
@@ -33,7 +33,7 @@ export const getApiUrl = (): string => {
 /**
  * Versão para contextos onde window pode não estar disponível (SSR)
  */
-export const getApiUrlSSR = (defaultUrl = 'https://nontragical-milton-prebranchial.ngrok-free.dev/api'): string => {
+export const getApiUrlSSR = (defaultUrl = 'https://api.vendedorautomaticointeligente.com/api'): string => {
   const envUrl = import.meta.env.VITE_API_URL
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
     return envUrl.replace(/\/+$/, '')
