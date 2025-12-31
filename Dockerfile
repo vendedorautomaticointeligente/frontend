@@ -13,8 +13,10 @@ RUN npm ci --prefer-offline --no-audit --legacy-peer-deps
 # Copy source code
 COPY . .
 
+# Copy .env.example to .env for production build
+RUN cp .env.example .env
+
 # Build the application with environment variables
-# NODE_ENV=production garante que Vite use .env.production
 RUN NODE_ENV=production npm run build
 
 # Production stage - Nginx
