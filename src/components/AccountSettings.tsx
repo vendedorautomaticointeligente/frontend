@@ -494,6 +494,9 @@ function AccountSettingsContent() {
               address_city: updatedUser.address_city,
               address_state: updatedUser.address_state,
               address_zipcode: updatedUser.address_zipcode,
+              email_notifications: updatedUser.email_notifications,
+              whatsapp_notifications: updatedUser.whatsapp_notifications,
+              weekly_report: updatedUser.weekly_report,
             })
             
             setSuccessMessage("✅ Perfil atualizado com sucesso!")
